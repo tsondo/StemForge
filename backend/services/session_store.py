@@ -53,6 +53,7 @@ class SessionStore:
         self._sfx_manifests: dict[str, dict] = {}  # sfx_id → manifest dict
         self._voice_paths: dict[str, pathlib.Path] = {}  # label → output path
         self._enhance_paths: dict[str, pathlib.Path] = {}  # label → enhanced output path
+        self._lyrics_paths: dict[str, pathlib.Path] = {}  # label → lyrics file path
         self._kept_clips: set[str] = set()  # paths explicitly kept by user
 
     # -- audio_path --
@@ -219,6 +220,16 @@ class SessionStore:
         with self._lock:
             self._enhance_paths[label] = path
 
+    # -- lyrics_paths --
+    @property
+    def lyrics_paths(self) -> dict[str, pathlib.Path]:
+        with self._lock:
+            return dict(self._lyrics_paths)
+
+    def add_lyrics_path(self, label: str, path: pathlib.Path) -> None:
+        with self._lock:
+            self._lyrics_paths[label] = path
+
     # -- kept_clips --
     @property
     def kept_clips(self) -> set[str]:
@@ -247,6 +258,7 @@ class SessionStore:
             self._sfx_manifests = {}
             self._voice_paths = {}
             self._enhance_paths = {}
+            self._lyrics_paths = {}
             self._kept_clips = set()
 
     def to_dict(self) -> dict[str, Any]:
@@ -280,6 +292,7 @@ class SessionStore:
                 ],
                 "voice_paths": {k: str(v) for k, v in self._voice_paths.items()},
                 "enhance_paths": {k: str(v) for k, v in self._enhance_paths.items()},
+                "lyrics_paths": {k: str(v) for k, v in self._lyrics_paths.items()},
             }
 
 

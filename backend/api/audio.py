@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
 from fastapi.responses import FileResponse
 
 from backend.services.session_store import SessionStore, get_user_session
-from utils.paths import OUTPUT_BASE, STEMS_DIR, MIDI_DIR, MUSICGEN_DIR, MIX_DIR, EXPORT_DIR, COMPOSE_DIR, SFX_DIR
+from utils.paths import OUTPUT_BASE, STEMS_DIR, MIDI_DIR, MUSICGEN_DIR, MIX_DIR, EXPORT_DIR, COMPOSE_DIR, SFX_DIR, LYRICS_DIR
 
 router = APIRouter(prefix="/api", tags=["audio"])
 
@@ -26,7 +26,7 @@ _ACESTEP_AUDIO_TMP = _PROJECT_ROOT / "Ace-Step-Wrangler" / "vendor" / "ACE-Step-
 
 # Directories from which we allow file streaming (security)
 _ALLOWED_ROOTS = [
-    OUTPUT_BASE, STEMS_DIR, MIDI_DIR, MUSICGEN_DIR, MIX_DIR, EXPORT_DIR, COMPOSE_DIR, SFX_DIR, _UPLOAD_DIR,
+    OUTPUT_BASE, STEMS_DIR, MIDI_DIR, MUSICGEN_DIR, MIX_DIR, EXPORT_DIR, COMPOSE_DIR, SFX_DIR, LYRICS_DIR, _UPLOAD_DIR,
     _ACESTEP_AUDIO_TMP,
 ]
 

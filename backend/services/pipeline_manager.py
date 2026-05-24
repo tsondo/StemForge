@@ -293,6 +293,10 @@ def _get_or_create(name: str, gpu_index: int | None = None) -> Any:
             from pipelines.effects_pipeline import EffectsPipeline
             cache[name] = EffectsPipeline()
 
+        elif name == "transcribe":
+            from pipelines.transcribe_pipeline import TranscribePipeline
+            cache[name] = TranscribePipeline()
+
         else:
             raise ValueError(f"Unknown pipeline: {name!r}")
 
@@ -329,6 +333,10 @@ def get_autotune(gpu_index: int | None = None) -> Any:
 
 def get_effects(gpu_index: int | None = None) -> Any:
     return _get_or_create("effects", gpu_index)
+
+
+def get_transcribe(gpu_index: int | None = None) -> Any:
+    return _get_or_create("transcribe", gpu_index)
 
 
 def evict(name: str, gpu_index: int | None = None) -> None:
