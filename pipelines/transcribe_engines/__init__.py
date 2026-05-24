@@ -17,7 +17,7 @@ from .whisper_engine import WhisperEngine
 
 # Maps engine_id → engine class.  Engine IDs are flat strings, distinct
 # from model_ids in models/registry.py.
-ENGINES: dict[str, type] = {
+ENGINES: dict[str, type[TranscriptionEngine]] = {
     "whisper": WhisperEngine,
     "qwen": QwenEngine,
 }
