@@ -4,7 +4,7 @@ from __future__ import annotations
 import pathlib
 
 import torch
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from backend.services.job_manager import job_manager
@@ -12,7 +12,7 @@ from backend.services.session_store import SessionStore, get_user_session
 from backend.services import pipeline_manager
 from models.registry import list_specs, WhisperSpec
 from pipelines.transcribe_engines import ENGINES
-from utils.paths import LYRICS_DIR, user_dir
+from utils.paths import ENHANCE_DIR, LYRICS_DIR, STEMS_DIR, user_dir
 
 router = APIRouter(prefix="/api/transcribe", tags=["transcribe"])
 
@@ -58,7 +58,7 @@ def _run_transcribe(
     job_id: str,
     session: SessionStore,
 ) -> dict:
-    from pipelines.transcribe_pipeline import TranscribePipeline, TranscribeConfig
+    from pipelines.transcribe_pipeline import TranscribeConfig
 
     progress_cb = job_manager.make_progress_callback(job_id)
     audio_path = pathlib.Path(req.audio_path)
@@ -104,10 +104,28 @@ def _run_transcribe(
 @router.post("")
 def start_transcribe(
     req: TranscribeRequest,
-    request: Request,
     session: SessionStore = Depends(get_user_session),
 ) -> dict:
-    user = getattr(request.state, "user", "local")
-    job_id = job_manager.create_job("transcribe", user=user)
+    # Validate the audio path synchronously so a bad request fails fast
+    # instead of surfacing as a job error after polling.  Allowed roots
+    # match the source-selector options in the Lyrics UI: separated
+    # stems, enhanced stems, and the originally uploaded audio.
+    audio_path = pathlib.Path(req.audio_path).resolve()
+    if not audio_path.exists():
+        raise HTTPException(404, f"Audio file not found: {req.audio_path}")
+
+    allowed_roots: list[pathlib.Path] = [STEMS_DIR.resolve(), ENHANCE_DIR.resolve()]
+    if session.audio_path is not None:
+        allowed_roots.append(session.audio_path.parent.resolve())
+    if not any(
+        str(audio_path).startswith(str(root)) for root in allowed_roots
+    ):
+        raise HTTPException(
+            403,
+            "Audio path is outside the allowed source directories. "
+            "Choose a separated stem, enhanced stem, or your uploaded audio.",
+        )
+
+    job_id = job_manager.create_job("transcribe", user=session.user)
     job_manager.run_job(job_id, _run_transcribe, req, job_id, session)
     return {"job_id": job_id}
