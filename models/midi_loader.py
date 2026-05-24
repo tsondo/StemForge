@@ -22,8 +22,6 @@ import logging
 from typing import Any
 
 from models.basicpitch_loader import BasicPitchModelLoader
-from models.registry import DEFAULT_WHISPER_SPEC
-from utils.cache import get_model_cache_dir
 from utils.midi_io import NoteEvent, LyricEvent, filter_to_key
 from utils.errors import ModelLoadError, PipelineExecutionError
 
@@ -55,7 +53,6 @@ class MidiModelLoader:
     def __init__(self) -> None:
         self._bp_loader = BasicPitchModelLoader()
         self._model: Any | None = None          # BasicPitch TF model
-        self._whisper_model: Any | None = None  # faster-whisper WhisperModel
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -96,34 +93,7 @@ class MidiModelLoader:
         """Release both models from memory and trigger GC."""
         self._bp_loader.evict()
         self._model = None
-        self._whisper_model = None
         log.debug("MidiModelLoader: models evicted.")
-
-    # ------------------------------------------------------------------
-    # Internal: Whisper lazy loader
-    # ------------------------------------------------------------------
-
-    def _ensure_whisper(self) -> Any:
-        """Load the faster-whisper model on first use."""
-        if self._whisper_model is not None:
-            return self._whisper_model
-        try:
-            from faster_whisper import WhisperModel
-        except ImportError as exc:
-            raise ModelLoadError(
-                "faster-whisper is not installed — cannot transcribe vocals.",
-                model_name="faster-whisper",
-            ) from exc
-        spec = DEFAULT_WHISPER_SPEC
-        log.info("Loading faster-whisper '%s' on CPU…", spec.model_size)
-        self._whisper_model = WhisperModel(
-            spec.model_size,
-            device=spec.device,
-            compute_type=spec.compute_type,
-            download_root=str(get_model_cache_dir("whisper")),
-        )
-        log.info("faster-whisper model ready.")
-        return self._whisper_model
 
     # ------------------------------------------------------------------
     # High-level conversion
@@ -286,12 +256,10 @@ class MidiModelLoader:
                 model_name="librosa",
             ) from exc
 
-        whisper = self._ensure_whisper()
-
-        # Load audio at 16 kHz for Whisper and also at 22 050 Hz for PYIN.
+        # Load audio at 22 050 Hz for PYIN.  The transcription engine
+        # reloads the audio from disk at its native rate internally.
         try:
             y_pyin, sr_pyin = librosa.load(str(path), sr=22_050, mono=True)
-            y_whisper, _sr_w = librosa.load(str(path), sr=16_000, mono=True)
         except Exception as exc:
             raise PipelineExecutionError(
                 f"Failed to load vocal audio '{path.name}': {exc}",
@@ -316,20 +284,16 @@ class MidiModelLoader:
             range(len(f0)), sr=sr_pyin, hop_length=512
         )
 
-        # Transcribe with faster-whisper to get word-level timestamps.
+        # Transcribe via the shared WhisperEngine.
+        from pipelines.transcribe_engines import WhisperEngine
+
+        engine = WhisperEngine(model_id="whisper-base")
         try:
-            segments_iter, _info = whisper.transcribe(
-                y_whisper,
-                language=language,
-                word_timestamps=True,
-                vad_filter=True,
-            )
-            segments = list(segments_iter)
-        except Exception as exc:
-            raise PipelineExecutionError(
-                f"Whisper transcription failed for '{path.name}': {exc}",
-                pipeline_name="midi",
-            ) from exc
+            engine.load()
+            transcription = engine.transcribe(path, language=language)
+        finally:
+            engine.clear()
+        segments = transcription.segments
 
         # Build one NoteEvent + LyricEvent per voiced word.
         events: list[NoteEvent] = []
@@ -360,7 +324,8 @@ class MidiModelLoader:
                 midi_pitch = max(0, min(127, midi_pitch))
 
                 clipped_end = min(end, duration) if duration > 0.0 else end
-                velocity = min(127, max(1, int(abs(word.probability) * 100)))
+                prob = word.probability if word.probability is not None else 0.5
+                velocity = min(127, max(1, int(abs(prob) * 100)))
                 events.append((start, clipped_end, midi_pitch, velocity))
 
                 # Strip leading/trailing punctuation but keep apostrophes.
