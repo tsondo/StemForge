@@ -50,7 +50,13 @@ class WhisperEngine:
                 model_name=self.model_id,
             ) from exc
 
-        if torch.cuda.is_available():
+        # Honor the spec's device field; "auto" defers to CUDA availability.
+        # All current Whisper variants default to "cpu" because CTranslate2
+        # ships CUDA-12 binaries and StemForge's venv runs CUDA 13.  When a
+        # GPU-capable Whisper spec becomes practical, set its device="auto"
+        # or "cuda" and this branch picks it up.
+        spec_device = (self._spec.device or "cpu").lower()
+        if spec_device == "cuda" or (spec_device == "auto" and torch.cuda.is_available()):
             device = "cuda"
             compute_type = "float16"
         else:
