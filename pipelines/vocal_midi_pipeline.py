@@ -292,7 +292,7 @@ class VocalMidiPipeline:
 
     is_loaded: bool
     _config: VocalMidiConfig | None
-    _whisper_model: Any
+    _transcribe_engine: Any
     _demucs_model: Any
     _basicpitch_model: Any
     _tmp_dir: tempfile.TemporaryDirectory | None  # type: ignore[type-arg]
@@ -301,7 +301,7 @@ class VocalMidiPipeline:
     def __init__(self) -> None:
         self.is_loaded = False
         self._config = None
-        self._whisper_model = None
+        self._transcribe_engine = None
         self._demucs_model = None
         self._basicpitch_model = None
         self._tmp_dir = None
@@ -360,24 +360,18 @@ class VocalMidiPipeline:
                 model_name=self._config.demucs_model,
             ) from exc
 
+        from pipelines.transcribe_engines import WhisperEngine
+
+        whisper_model_id = f"whisper-{self._config.whisper_model_size}"
+        log.info("Loading transcribe engine for %s…", whisper_model_id)
         try:
-            from faster_whisper import WhisperModel
-            log.info(
-                "Loading Whisper '%s' on %s (%s)…",
-                self._config.whisper_model_size,
-                self._config.whisper_device,
-                self._config.whisper_compute_type,
-            )
-            self._whisper_model = WhisperModel(
-                self._config.whisper_model_size,
-                device=self._config.whisper_device,
-                compute_type=self._config.whisper_compute_type,
-            )
-            log.info("Whisper loaded.")
+            self._transcribe_engine = WhisperEngine(model_id=whisper_model_id)
+            self._transcribe_engine.load()
+            log.info("Transcribe engine loaded.")
         except Exception as exc:
             raise ModelLoadError(
-                f"Failed to load Whisper model '{self._config.whisper_model_size}': {exc}",
-                model_name=self._config.whisper_model_size,
+                f"Failed to load Whisper engine for {whisper_model_id}: {exc}",
+                model_name=whisper_model_id,
             ) from exc
 
         # BasicPitch uses TensorFlow. Force CPU mode:
@@ -504,7 +498,9 @@ class VocalMidiPipeline:
     def clear(self) -> None:
         """Release all model weights and temporary files."""
         self._demucs_model = None
-        self._whisper_model = None
+        if self._transcribe_engine is not None:
+            self._transcribe_engine.clear()
+            self._transcribe_engine = None
         self._basicpitch_model = None
         if self._tmp_dir is not None:
             try:
@@ -674,7 +670,7 @@ class VocalMidiPipeline:
         vocal_path: pathlib.Path,
         initial_prompt: str | None = None,
     ) -> list[WordTiming]:
-        """Run faster-whisper on *vocal_path* and return word-level timestamps.
+        """Run the shared WhisperEngine on *vocal_path* and return word-level timestamps.
 
         Parameters
         ----------
@@ -682,32 +678,25 @@ class VocalMidiPipeline:
             Path to the isolated vocal stem WAV.
         initial_prompt:
             Optional text fed to Whisper as context (e.g. the ACE-Step
-            ``caption`` field).  Improves accuracy for domain-specific
-            vocabulary.
+            ``caption`` field).
 
         Returns
         -------
         list[WordTiming]
             ``(word, start_sec, end_sec)`` tuples, one per word token.
         """
-        segments_gen, info = self._whisper_model.transcribe(
-            str(vocal_path),
-            word_timestamps=True,
-            initial_prompt=initial_prompt,
+        result = self._transcribe_engine.transcribe(
+            vocal_path, prompt=initial_prompt,
         )
         log.info(
-            "Whisper: language=%r (p=%.2f), duration=%.1fs",
-            info.language,
-            info.language_probability,
-            info.duration,
+            "Whisper: language=%r, segments=%d",
+            result.language, len(result.segments),
         )
 
         words: list[WordTiming] = []
-        for segment in segments_gen:
-            if segment.words:
-                for w in segment.words:
-                    words.append((w.word, w.start, w.end))
-
+        for segment in result.segments:
+            for w in segment.words:
+                words.append((w.word, w.start, w.end))
         return words
 
     def _extract_notes(self, vocal_path: pathlib.Path) -> list[NoteEvent]:
