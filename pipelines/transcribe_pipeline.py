@@ -17,7 +17,7 @@ from pipelines.transcribe_engines import (
     TranscriptionEngine,
     TranscriptionResult,
 )
-from utils.errors import InvalidInputError, PipelineExecutionError
+from utils.errors import AudioProcessingError, InvalidInputError, PipelineExecutionError
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +55,14 @@ class TranscribePipeline:
                 f"Available: {sorted(ENGINES)}",
                 field="engine_id",
             )
+        # If a different engine/model was already loaded, evict it so the
+        # next load_model() instantiates fresh.  Matches DemucsPipeline's
+        # configure() convention.
+        if self._engine is not None and self._config is not None and (
+            config.engine_id != self._config.engine_id
+            or config.model_id != self._config.model_id
+        ):
+            self.clear()
         self._config = config
 
     def load_model(self) -> None:
@@ -107,18 +115,24 @@ class TranscribePipeline:
 
         output_paths: dict[str, pathlib.Path] = {}
         for fmt in self._config.formats:
-            if fmt == "txt":
-                p = out_dir / f"{base}.txt"
-                p.write_text(result.text, encoding="utf-8")
-                output_paths["txt"] = p
-            elif fmt == "lrc":
-                p = out_dir / f"{base}.lrc"
-                p.write_text(_format_lrc(result), encoding="utf-8")
-                output_paths["lrc"] = p
-            elif fmt == "srt":
-                p = out_dir / f"{base}.srt"
-                p.write_text(_format_srt(result), encoding="utf-8")
-                output_paths["srt"] = p
+            try:
+                if fmt == "txt":
+                    p = out_dir / f"{base}.txt"
+                    p.write_text(result.text, encoding="utf-8")
+                    output_paths["txt"] = p
+                elif fmt == "lrc":
+                    p = out_dir / f"{base}.lrc"
+                    p.write_text(_format_lrc(result), encoding="utf-8")
+                    output_paths["lrc"] = p
+                elif fmt == "srt":
+                    p = out_dir / f"{base}.srt"
+                    p.write_text(_format_srt(result), encoding="utf-8")
+                    output_paths["srt"] = p
+            except OSError as exc:
+                raise AudioProcessingError(
+                    f"Failed to write {fmt} output to {out_dir}: {exc}",
+                    path=str(out_dir),
+                ) from exc
 
         if progress_cb:
             progress_cb(1.0, "Done")
