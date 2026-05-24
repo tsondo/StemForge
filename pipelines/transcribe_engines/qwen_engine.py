@@ -36,9 +36,16 @@ class QwenEngine:
     supports_word_timestamps = False
     requires_gpu = True
 
-    def __init__(self, model_id: str | None = None) -> None:
+    def __init__(
+        self,
+        model_id: str | None = None,
+        *,
+        device: str = "cuda",
+    ) -> None:
         # model_id kwarg accepted for Protocol uniformity; ignored — Qwen
-        # has exactly one variant in v1.
+        # has exactly one variant in v1.  device may be "cuda" (default)
+        # or "cuda:N" for multi-GPU scheduling.
+        self._device = device
         self._model: Any | None = None
         self._processor: Any | None = None
 
@@ -72,7 +79,7 @@ class QwenEngine:
                 _QWEN_REPO,
                 cache_dir=cache_dir,
                 torch_dtype=torch.float16,
-                device_map="cuda",
+                device_map=self._device,
             )
         except Exception as exc:
             raise ModelLoadError(
@@ -119,7 +126,7 @@ class QwenEngine:
         inputs = self._processor(
             text=text, audios=[audio], sampling_rate=16_000,
             return_tensors="pt", padding=True,
-        ).to("cuda")
+        ).to(self._model.device)
 
         try:
             with torch.inference_mode():
