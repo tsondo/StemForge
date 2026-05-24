@@ -17,7 +17,7 @@ from starlette.responses import Response, JSONResponse
 from utils.paths import OUTPUT_BASE, STEMS_DIR, MIDI_DIR, MUSICGEN_DIR, MIX_DIR, EXPORT_DIR, COMPOSE_DIR, SFX_DIR, VOICE_DIR, ENHANCE_DIR, LYRICS_DIR
 from utils.logging_utils import configure_logging
 
-from backend.api import system, audio, separate, midi, generate, mix, export, compose, sfx, voice, enhance
+from backend.api import system, audio, separate, midi, generate, mix, export, compose, sfx, voice, enhance, transcribe
 from backend.services.session_store import registry
 from backend.services.job_manager import job_manager, JobLimitError
 
@@ -110,6 +110,7 @@ app.include_router(compose.router)
 app.include_router(sfx.router)
 app.include_router(voice.router)
 app.include_router(enhance.router)
+app.include_router(transcribe.router)
 
 # Ensure output directories exist
 for d in (OUTPUT_BASE, STEMS_DIR, MIDI_DIR, MUSICGEN_DIR, MIX_DIR, EXPORT_DIR, COMPOSE_DIR, SFX_DIR, VOICE_DIR, ENHANCE_DIR, LYRICS_DIR):
