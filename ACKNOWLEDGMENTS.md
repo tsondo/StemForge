@@ -67,6 +67,17 @@ CTranslate2-accelerated Whisper inference powering the Vocal MIDI pipeline.
 
 ---
 
+## Qwen2-Audio — Alibaba Cloud (Tongyi Lab)
+
+Multimodal audio understanding model used as an optional engine in the
+Lyrics transcription feature on the MIDI tab.
+
+- **Model:** https://huggingface.co/Qwen/Qwen2-Audio-7B-Instruct
+- **Paper:** Chu et al. — *Qwen2-Audio Technical Report* (2024)
+- **License:** Apache 2.0 (verified at integration time — see `licenses/LICENSE-Qwen2-Audio`)
+
+---
+
 ## Stable Audio Open — Stability AI
 
 Text-conditioned audio generation model powering the Synth tab.
