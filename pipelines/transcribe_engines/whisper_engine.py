@@ -56,7 +56,18 @@ class WhisperEngine:
         # GPU-capable Whisper spec becomes practical, set its device="auto"
         # or "cuda" and this branch picks it up.
         spec_device = (self._spec.device or "cpu").lower()
-        if spec_device == "cuda" or (spec_device == "auto" and torch.cuda.is_available()):
+        want_cuda = (
+            spec_device == "cuda"
+            or (spec_device == "auto" and torch.cuda.is_available())
+        )
+        if want_cuda and not torch.cuda.is_available():
+            fallback = (self._spec.device_fallback or "cpu").lower()
+            log.warning(
+                "Spec for %s requests CUDA but it's unavailable; falling back to %s",
+                self.model_id, fallback,
+            )
+            want_cuda = False
+        if want_cuda:
             device = "cuda"
             compute_type = "float16"
         else:
@@ -89,6 +100,9 @@ class WhisperEngine:
         prompt: str | None = None,
     ) -> TranscriptionResult:
         self.load()
+        segments: list[TranscriptionSegment] = []
+        full_text_parts: list[str] = []
+        language_detected: str | None = None
         try:
             segments_iter, info = self._model.transcribe(
                 str(audio_path),
@@ -97,35 +111,33 @@ class WhisperEngine:
                 language=language,
                 initial_prompt=prompt,
             )
+            language_detected = str(info.language) if info.language else None
+            for seg in segments_iter:
+                words: list[WordTiming] = []
+                if seg.words:
+                    for w in seg.words:
+                        words.append(WordTiming(
+                            word=str(w.word),
+                            start=float(w.start),
+                            end=float(w.end),
+                            probability=float(w.probability) if w.probability is not None else None,
+                        ))
+                segments.append(TranscriptionSegment(
+                    start=float(seg.start),
+                    end=float(seg.end),
+                    text=str(seg.text),
+                    words=words,
+                ))
+                full_text_parts.append(str(seg.text))
         except Exception as exc:
             raise PipelineExecutionError(
                 f"Whisper transcription failed for {audio_path.name}: {exc}",
                 pipeline_name="transcribe",
             ) from exc
 
-        segments: list[TranscriptionSegment] = []
-        full_text_parts: list[str] = []
-        for seg in segments_iter:
-            words: list[WordTiming] = []
-            if seg.words:
-                for w in seg.words:
-                    words.append(WordTiming(
-                        word=str(w.word),
-                        start=float(w.start),
-                        end=float(w.end),
-                        probability=float(w.probability) if w.probability is not None else None,
-                    ))
-            segments.append(TranscriptionSegment(
-                start=float(seg.start),
-                end=float(seg.end),
-                text=str(seg.text),
-                words=words,
-            ))
-            full_text_parts.append(str(seg.text))
-
         return TranscriptionResult(
             text="".join(full_text_parts).strip(),
-            language=str(info.language) if info.language else None,
+            language=language_detected,
             segments=segments,
             has_word_timestamps=True,
             engine_id=self.engine_id,
