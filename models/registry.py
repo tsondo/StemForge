@@ -573,6 +573,36 @@ WHISPER_MEDIUM = _register(WhisperSpec(
     vad_filter=True,
 ))
 
+WHISPER_LARGE_V3 = _register(WhisperSpec(
+    model_id="whisper-large-v3",
+    display_name="Whisper large-v3",
+    version="1.1.0",
+    source="openai/whisper-large-v3",
+    device="cpu",
+    gpu_capable=True,
+    device_fallback="cpu",
+    device_quirks="",
+    sample_rate=16_000,
+    hop_size=0,
+    chunk_size=0,
+    max_duration_seconds=0.0,
+    default_bpm=0.0,
+    default_key="",
+    default_time_signature="",
+    quantize_grid="none",
+    default_min_note_ms=0.0,
+    capabilities=_WHISPER_CAPS,
+    cache_subdir="whisper",
+    description="Whisper large-v3 — best accuracy, GPU recommended.",
+    preprocessing="Mono 16 kHz; VAD pre-filter.",
+    postprocessing="Word-level timestamps; PYIN pitch estimation per word.",
+    model_size="large-v3",
+    compute_type="int8",
+    default_language=None,
+    word_timestamps=True,
+    vad_filter=True,
+))
+
 # ---------------------------------------------------------------------------
 # Stable Audio Open
 # ---------------------------------------------------------------------------
