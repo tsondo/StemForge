@@ -21,6 +21,7 @@ StemForge v1.0.0 is published and actively developed post-release. All core pipe
 **What's working:**
 - Demucs + BS-Roformer stem separation (10 models total), batch mode, auto engine recommendation
 - MIDI extraction for instruments (BasicPitch) and vocals (faster-whisper + PYIN)
+- **Lyrics transcription (MIDI tab)** — Notes/Lyrics mode bar; engine selection between Whisper (tiny → large-v3) and Qwen2-Audio-7B-Instruct; outputs .txt/.lrc/.srt; `Send to Compose` integration with the AI lyrics workflow.
 - Enhance tab with three-mode bar: Clean Up (8 UVR presets), Tune (CREPE + WORLD/STFT auto-tune), Effects (EQ, Compressor with DSP/LA-2A neural, Noise Gate with DSP/Spectral, Stereo Width)
 - Stable Audio Open generation (Synth tab) — text + audio + MIDI conditioning, chunked to 600s
 - SFX Stem Builder — DAW timeline with clip placement, fades, align-to reference

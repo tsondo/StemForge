@@ -126,6 +126,23 @@ Extract a MIDI representation from any separated stem.
 
 Select the stems to extract from, then click **Extract MIDI**. Each extracted stem shows a piano-roll preview and a **Preview** button that renders the MIDI to audio via FluidSynth and plays it in the browser. MIDI files can be saved to disk or sent to the Mix tab as a rendered track.
 
+### 4.1 · Lyrics mode
+
+The MIDI tab has two sub-modes selected with the `Notes | Lyrics` bar at the top:
+
+- **Notes** (default) — the existing audio-to-MIDI pipeline (BasicPitch for instruments, faster-whisper + PYIN for vocals).
+- **Lyrics** — transcribe lyrics from any audio source to `.txt`, `.lrc`, and `.srt`.
+
+In Lyrics mode:
+
+1. Pick a **Source** — a separated stem (vocal recommended), an enhanced stem, or the originally uploaded full mix.
+2. Pick an **Engine** — Whisper variants (`tiny`, `base`, `small`, `medium`, `large-v3`) run on CPU or GPU; Qwen2-Audio-7B-Instruct runs only on GPU and is marked `(GPU required)` when CUDA is unavailable.
+3. Pick a **Language** — `Auto-detect` works well for Whisper; for Qwen, selecting an explicit language helps the prompt.
+4. Choose output formats — `.txt` is always produced; `.lrc` and `.srt` are optional. Qwen uses segment-level timing rather than word-level.
+5. Click **Transcribe**. Outputs are saved under `~/.local/share/stemforge/output/lyrics/<user>/`.
+
+Click **Send to Compose** on the result card to import the lyrics into the Compose tab's "My Lyrics" textarea (you'll be asked before any existing text is replaced).
+
 ---
 
 ## 5. Synth — Audio Generation & SFX Stem Builder
