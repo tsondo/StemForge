@@ -32,6 +32,8 @@ class TranscribeConfig:
     prompt: str | None = None
     output_dir: pathlib.Path | None = None
     formats: tuple[str, ...] = ("txt", "lrc", "srt")
+    gpu_index: int | None = None     # multi-GPU scheduler hint; engines that
+                                      # care (Qwen) bind to cuda:{gpu_index}.
 
 
 @dataclass(slots=True)
@@ -72,7 +74,16 @@ class TranscribePipeline:
                 pipeline_name="transcribe",
             )
         engine_cls = ENGINES[self._config.engine_id]
-        self._engine = engine_cls(model_id=self._config.model_id)
+        kwargs: dict = {"model_id": self._config.model_id}
+        # Only Qwen accepts a device kwarg today; Whisper reads its device
+        # from the model spec.  Forward gpu_index only when relevant so we
+        # don't break the WhisperEngine constructor signature.
+        if (
+            self._config.engine_id == "qwen"
+            and self._config.gpu_index is not None
+        ):
+            kwargs["device"] = f"cuda:{self._config.gpu_index}"
+        self._engine = engine_cls(**kwargs)
         self._engine.load()
 
     def run(

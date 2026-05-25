@@ -66,16 +66,17 @@ def _run_transcribe(
         raise FileNotFoundError(f"Audio file not found: {req.audio_path}")
 
     out_dir = user_dir(LYRICS_DIR, session.user)
-    config = TranscribeConfig(
-        engine_id=req.engine_id,
-        model_id=req.model_id,
-        language=req.language,
-        prompt=req.prompt,
-        output_dir=out_dir,
-        formats=tuple(req.formats),
-    )
 
     with pipeline_manager.gpu_session(pipeline_hint="transcribe") as ctx:
+        config = TranscribeConfig(
+            engine_id=req.engine_id,
+            model_id=req.model_id,
+            language=req.language,
+            prompt=req.prompt,
+            output_dir=out_dir,
+            formats=tuple(req.formats),
+            gpu_index=ctx.gpu_index,
+        )
         pipeline = pipeline_manager.get_transcribe(ctx.gpu_index)
         pipeline.configure(config)
         try:

@@ -147,6 +147,7 @@ export function initExport() {
   appState.on('sfxReady', refreshPreviews);
   appState.on('transformReady', refreshPreviews);
   appState.on('enhanceReady', refreshPreviews);
+  appState.on('lyricsReady', refreshPreviews);
 }
 
 async function _handleExportFiles(fileList) {
@@ -233,9 +234,27 @@ function refreshPreviews() {
   document.getElementById('export-start').disabled = false;
 
   for (const item of items) {
+    const checkbox = el('input', { type: 'checkbox', checked: 'true', 'data-path': item.path });
+
+    // Lyrics outputs (.txt/.lrc/.srt) are non-audio \u2014 render a simple row
+    // with a checkbox + label so they can be selected for export, but skip
+    // the waveform/playback chrome that only makes sense for audio.
+    if (item.type === 'lyrics') {
+      const ext = (item.path.split('.').pop() || '').toLowerCase();
+      const header = el('div', { className: 'stem-card-header' },
+        el('label', { className: 'export-check-label' }, checkbox,
+          el('span', { className: 'stem-label' }, `${item.label}  `,
+            el('span', { className: 'text-dim' }, `(${item.type}${ext ? ' \u00B7 .' + ext : ''})`),
+          ),
+        ),
+      );
+      const card = el('div', { className: 'stem-card' }, header);
+      container.appendChild(card);
+      continue;
+    }
+
     const streamUrl = `/api/audio/stream?path=${encodeURIComponent(item.path)}`;
 
-    const checkbox = el('input', { type: 'checkbox', checked: 'true', 'data-path': item.path });
     const playBtn = el('button', { className: 'btn btn-sm' }, '\u25B6 Play');
     const stopBtn = el('button', { className: 'btn btn-sm' }, '\u25A0');
     const rewindBtn = el('button', { className: 'btn btn-sm' }, '\u23EA');
@@ -334,6 +353,11 @@ function collectArtifacts() {
   // Enhanced stems
   for (const [label, path] of Object.entries(appState.enhancePaths || {})) {
     items.push({ label, path, type: 'enhanced' });
+  }
+
+  // Lyrics transcription outputs (.txt/.lrc/.srt) — non-audio
+  for (const [label, path] of Object.entries(appState.lyricsPaths || {})) {
+    items.push({ label, path, type: 'lyrics' });
   }
 
   // Mix
