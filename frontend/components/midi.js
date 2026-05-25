@@ -1036,10 +1036,10 @@ function switchMidiMode(mode) {
 }
 
 async function loadLyricsEngines() {
+  const sel = document.getElementById('lyrics-engine');
   try {
     const data = await api('/transcribe/engines');
     _lyricsEngines = data.engines || [];
-    const sel = document.getElementById('lyrics-engine');
     clearChildren(sel);
     for (const e of _lyricsEngines) {
       for (const m of e.models) {
@@ -1057,7 +1057,15 @@ async function loadLyricsEngines() {
     if (defaultOpt) sel.value = defaultOpt.value;
     onLyricsEngineChange();
   } catch (err) {
-    /* leave engine list empty — user will see disabled transcribe button */
+    // Engine list failed to load — show a disabled placeholder option and
+    // keep the Transcribe button disabled so the user gets a clear signal.
+    _lyricsEngines = [];
+    clearChildren(sel);
+    const opt = el('option', { value: '' }, 'Engines unavailable — backend offline?');
+    opt.disabled = true;
+    sel.appendChild(opt);
+    const transcribeBtn = document.getElementById('lyrics-transcribe');
+    if (transcribeBtn) transcribeBtn.disabled = true;
   }
 }
 
@@ -1111,6 +1119,10 @@ function refreshLyricsSources() {
   // Prefer the first vocal stem if present
   const vocal = sources.find(s => s.isVocal);
   if (vocal) sel.value = vocal.path;
+  // Only enable Transcribe if engines also loaded.  If loadLyricsEngines()
+  // failed, _lyricsEngines is empty and the engine select shows a disabled
+  // placeholder; keep the button disabled until engines arrive.
+  if (_lyricsEngines.length === 0) return;
   transcribeBtn.disabled = false;
 }
 
