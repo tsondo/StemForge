@@ -180,19 +180,22 @@ export function initMidi() {
     id: 'lyrics-cond-row',
     style: { display: 'none' },   // shown only for Whisper engines
   },
-    el('label', { className: 'checkbox-label' },
+    el('label', {
+      className: 'checkbox-label',
+      title: "Whisper conditions each transcription window on its own previous output. For continuous speech this improves coherence across sentences. For music it commonly causes hallucinated repetition loops on instrumental passages and fade-outs, because the model has no fresh acoustic content and keeps predicting whatever it just emitted. Off by default. Turn on for spoken-word audio (audiobooks, podcasts, dictation).",
+    },
       el('input', { type: 'checkbox', id: 'lyrics-condition-on-previous' }),
       ' Cross-window conditioning',
-    ),
-    el('div', { className: 'text-dim', style: { fontSize: '0.85em', marginTop: '2px' } },
-      "Whisper's default is on, but it commonly causes hallucinated repetition on instrumental passages. StemForge disables it by default for music.",
     ),
   );
 
   const lyricsCollapseRow = el('div', { className: 'form-group' },
-    el('label', { className: 'checkbox-label' },
+    el('label', {
+      className: 'checkbox-label',
+      title: 'Collapses runs of identical lines longer than the maximum below into that many copies followed by "[...]". Useful when Whisper hallucinates a repetition loop, but will also collapse genuinely repeated lyrics (an outro that repeats a line ten times, a chorus with many "oh, oh, oh" repetitions, etc.). Turn off if your song has real, intentional repetition you want preserved verbatim.',
+    },
       el('input', { type: 'checkbox', id: 'lyrics-collapse-reps', checked: 'true' }),
-      ' Collapse repeated lines (recommended for music)',
+      ' Collapse repeated lines',
     ),
     el('div', { className: 'form-row', style: { marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' } },
       el('label', { style: { fontSize: '0.85em' } }, 'Max repetitions before collapse:'),
