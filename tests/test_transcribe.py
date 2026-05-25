@@ -88,6 +88,94 @@ def test_collapse_repetitions() -> None:
     print("collapse_repetitions OK")
 
 
+def test_qwen_chunker_single_chunk() -> None:
+    """Audio shorter than chunk size should produce exactly one chunk."""
+    import numpy as np
+    from pipelines.transcribe_engines._qwen_chunker import (
+        slice_audio, CHUNK_DURATION_S, SAMPLE_RATE,
+    )
+    # 10 seconds of silence
+    audio = np.zeros(int(10 * SAMPLE_RATE), dtype=np.float32)
+    chunks = slice_audio(audio)
+    assert len(chunks) == 1, f"got {len(chunks)} chunks for 10s audio"
+    assert chunks[0].start_s == 0.0
+    assert abs(chunks[0].end_s - 10.0) < 0.01
+    print("qwen_chunker single OK")
+
+
+def test_qwen_chunker_overlap_layout() -> None:
+    """Verify chunk boundaries match the documented step/overlap values."""
+    import numpy as np
+    from pipelines.transcribe_engines._qwen_chunker import (
+        slice_audio, CHUNK_DURATION_S, OVERLAP_DURATION_S, STEP_DURATION_S,
+        SAMPLE_RATE,
+    )
+    # 60 seconds → expect chunks at [0-24], [18-42], [36-60].
+    audio = np.zeros(int(60 * SAMPLE_RATE), dtype=np.float32)
+    chunks = slice_audio(audio)
+    assert len(chunks) == 3, f"got {len(chunks)} chunks for 60s audio"
+    assert abs(chunks[0].start_s - 0.0) < 0.01
+    assert abs(chunks[1].start_s - STEP_DURATION_S) < 0.01    # 18.0
+    assert abs(chunks[2].start_s - 2 * STEP_DURATION_S) < 0.01  # 36.0
+    assert abs(chunks[0].end_s - CHUNK_DURATION_S) < 0.01       # 24.0
+    assert abs(chunks[-1].end_s - 60.0) < 0.01
+    print("qwen_chunker overlap layout OK")
+
+
+def test_qwen_chunker_irregular_tail() -> None:
+    """Final chunk should be truncated to actual audio length, not padded."""
+    import numpy as np
+    from pipelines.transcribe_engines._qwen_chunker import (
+        slice_audio, SAMPLE_RATE,
+    )
+    # 50 seconds → [0-24], [18-42], [36-50]
+    audio = np.zeros(int(50 * SAMPLE_RATE), dtype=np.float32)
+    chunks = slice_audio(audio)
+    assert len(chunks) == 3
+    assert abs(chunks[-1].end_s - 50.0) < 0.01
+    assert abs(chunks[-1].start_s - 36.0) < 0.01
+    # The final chunk is 14 seconds, not 24.
+    print("qwen_chunker irregular tail OK")
+
+
+def test_qwen_stitcher_clean_overlap() -> None:
+    """Two chunks with a clear shared substring should stitch cleanly."""
+    from pipelines.transcribe_engines._qwen_chunker import stitch_chunks
+    chunk_a = "feliz cumpleaños mi princesa eres mi sol mi fortaleza"
+    chunk_b = "mi sol mi fortaleza con tu amor llenas mi vida"
+    stitched = stitch_chunks([chunk_a, chunk_b])
+    # The shared "mi sol mi fortaleza" should appear exactly once.
+    assert stitched.lower().count("mi sol mi fortaleza") == 1, stitched
+    assert "feliz cumpleaños" in stitched.lower()
+    assert "llenas mi vida" in stitched.lower()
+    print("qwen_stitcher clean overlap OK")
+
+
+def test_qwen_stitcher_no_overlap_falls_back() -> None:
+    """When chunks share no content, both are preserved with a separator."""
+    from pipelines.transcribe_engines._qwen_chunker import stitch_chunks
+    chunk_a = "uno dos tres cuatro cinco"
+    chunk_b = "siete ocho nueve diez once"
+    stitched = stitch_chunks([chunk_a, chunk_b])
+    assert "uno dos tres" in stitched
+    assert "nueve diez once" in stitched
+    print("qwen_stitcher fallback OK")
+
+
+def test_qwen_stitcher_single_chunk() -> None:
+    """Single-chunk input should be returned unchanged."""
+    from pipelines.transcribe_engines._qwen_chunker import stitch_chunks
+    stitched = stitch_chunks(["hello world"])
+    assert stitched == "hello world"
+    print("qwen_stitcher single chunk OK")
+
+
 if __name__ == "__main__":
     main()
     test_collapse_repetitions()
+    test_qwen_chunker_single_chunk()
+    test_qwen_chunker_overlap_layout()
+    test_qwen_chunker_irregular_tail()
+    test_qwen_stitcher_clean_overlap()
+    test_qwen_stitcher_no_overlap_falls_back()
+    test_qwen_stitcher_single_chunk()

@@ -1009,3 +1009,12 @@ Qwen is intentionally **not** smoke-tested in CI — it requires GPU, is large t
 19. MIDI Lyrics dropdown shows exactly five annotated entries matching §3.1.
 20. `ACKNOWLEDGMENTS.md` contains the new bitsandbytes entry.
 21. Manual checklist (§5.3 of Addendum 2) passes on Tsondo's laptop, specifically the Qwen 4-bit transcription run.
+
+*(Addendum 3 — Overlap-and-stitch chunking for Qwen)*
+
+22. `pipelines/transcribe_engines/_qwen_chunker.py` exists with `slice_audio` and `stitch_chunks` implemented per §3.
+23. `QwenEngine.transcribe()` uses the chunker; `_transcribe_chunk` helper extracted.
+24. All six new unit tests in `tests/test_transcribe.py` pass.
+25. Re-running the Catrina stem through Qwen 4-bit shows no chunk-boundary gibberish ("Eless con piernas"-type failures).
+26. Whisper transcription is byte-for-byte unchanged — chunker code is reachable only via `QwenEngine`.
+27. Logs show `Qwen transcribing N.Ns of audio in M chunk(s).` followed by per-pair `Stitched chunk X → X+1: matched Y tokens` lines on a multi-chunk run.

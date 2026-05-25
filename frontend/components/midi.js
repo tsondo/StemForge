@@ -130,7 +130,7 @@ export function initMidi() {
   const lyricsEngineSelect = el('select', {
     id: 'lyrics-engine',
     className: 'select',
-    title: 'Whisper is the standard speech recognition engine — fast, supports word-level timestamps, runs on CPU or GPU. Qwen2-Audio is a multimodal language model — slower, more accurate on sung or unusual vocals, no word timestamps, GPU only. The 4-bit Qwen variant fits in ~9 GB VRAM with minor quality loss.',
+    title: 'Whisper is the standard speech recognition engine — fast, supports word-level timestamps, runs on CPU or GPU. Qwen2-Audio is a multimodal language model — slower, more accurate on sung or unusual vocals, no word timestamps, GPU only. The 4-bit Qwen variant fits in ~9 GB VRAM with minor quality loss. Long audio is automatically chunked into overlapping 24-second windows; transcripts are stitched together by matching text in the overlap regions.',
   });
   const lyricsEngineGroup = el('div', { className: 'form-group' },
     lyricsEngineLabel, lyricsEngineSelect,
