@@ -13,10 +13,11 @@ CHUNK_DURATION_S      : Audio window passed to the model per call. Must be
 OVERLAP_DURATION_S    : Redundant audio at each chunk boundary. Chosen to
                         reliably contain 2+ alignable tokens on sparse sung
                         audio while keeping compute overhead acceptable.
-MIN_MATCH_TOKENS      : Minimum LCS length (in tokens) to accept a stitch.
-                        Below this, fall back to concatenation with no
-                        deduplication — redundant text is better than dropped
-                        text.
+MIN_MATCH_TOKENS_STRICT : Minimum LCS length (in tokens) that auto-accepts
+                          a stitch. Below this (length 1), a substantive-token
+                          rule applies — see _is_acceptable_match. Length 0
+                          falls back to concatenation with no deduplication.
+                          Redundant text is better than dropped text.
 ALIGN_WINDOW_FRACTION : Fraction of each chunk's text searched for an
                         alignment match. 0.30 means the last 30% of chunk N
                         is matched against the first 30% of chunk N+1.
@@ -37,8 +38,33 @@ CHUNK_DURATION_S: float = 24.0
 OVERLAP_DURATION_S: float = 6.0
 STEP_DURATION_S: float = CHUNK_DURATION_S - OVERLAP_DURATION_S  # 18.0
 
-MIN_MATCH_TOKENS: int = 2
 ALIGN_WINDOW_FRACTION: float = 0.30
+
+# Match acceptance rules. Two-or-more-token matches are always accepted.
+# Single-token matches require the token to be substantive — long enough and
+# not on the function-word stop list. This catches the common case of sparse
+# sung audio where the overlap region contains only one content word, while
+# rejecting accidental matches on Spanish/English function words.
+MIN_MATCH_TOKENS_STRICT: int = 2
+MIN_SINGLE_TOKEN_LENGTH: int = 4    # chars (after normalization)
+
+# Function words to never accept as a single-token match. Lower-cased.
+# Spanish + English coverage; both languages are realistic for this app.
+_SINGLE_TOKEN_STOPLIST: frozenset[str] = frozenset({
+    # Spanish articles, prepositions, common verbs
+    "el", "la", "los", "las", "un", "una", "unos", "unas",
+    "de", "del", "al", "en", "con", "por", "para", "sin",
+    "que", "como", "cuando", "donde", "mi", "tu", "su",
+    "es", "son", "era", "fue", "ser", "ir", "voy", "vas",
+    "me", "te", "se", "le", "lo", "y", "o", "no", "si",
+    # English equivalents
+    "the", "a", "an", "of", "in", "on", "at", "to", "for",
+    "with", "and", "or", "but", "is", "are", "was", "were",
+    "i", "you", "we", "they", "he", "she", "it", "my", "your",
+    "this", "that", "these", "those",
+    # Filler / interjection
+    "oh", "ah", "uh", "mm", "yeah", "ay",
+})
 # Floor for the fraction-based alignment window.  ALIGN_WINDOW_FRACTION is
 # calibrated for realistic 24-second chunks (~50–200 tokens), where 30%
 # gives a 15–60 token window — comfortably larger than typical overlaps.
@@ -163,6 +189,32 @@ def _longest_common_substring(a: list[str], b: list[str]) -> tuple[int, int, int
     return (best_len, best_a, best_b)
 
 
+def _is_acceptable_match(
+    length: int,
+    tail: list[str],
+    tail_start: int,
+) -> bool:
+    """Decide whether an LCS match is strong enough to stitch on.
+
+    Rules:
+      - Length >= MIN_MATCH_TOKENS_STRICT (2): always accept.
+      - Length == 1: accept only if the matched token is substantive —
+        at least MIN_SINGLE_TOKEN_LENGTH characters after normalization
+        and not on the stop-word list.
+      - Length == 0: reject.
+    """
+    if length >= MIN_MATCH_TOKENS_STRICT:
+        return True
+    if length == 1:
+        matched = _norm_for_match(tail[tail_start])
+        if len(matched) < MIN_SINGLE_TOKEN_LENGTH:
+            return False
+        if matched in _SINGLE_TOKEN_STOPLIST:
+            return False
+        return True
+    return False
+
+
 def stitch_chunks(chunk_texts: list[str]) -> str:
     """Stitch overlapping chunk transcripts into a single transcript.
 
@@ -170,7 +222,7 @@ def stitch_chunks(chunk_texts: list[str]) -> str:
       1. Take the last ALIGN_WINDOW_FRACTION of N's tokens (tail).
       2. Take the first ALIGN_WINDOW_FRACTION of N+1's tokens (head).
       3. Find the longest common substring between tail and head.
-      4. If LCS length >= MIN_MATCH_TOKENS:
+      4. If _is_acceptable_match(LCS length, tail, tail_start) is True:
            - Cut N at the *start* of its matched region.
            - Cut N+1 at the *end* of its matched region.
            - The matched region itself is kept from N (could be either; N
@@ -188,53 +240,72 @@ def stitch_chunks(chunk_texts: list[str]) -> str:
     # Tokenize all chunks once.
     tokens_per_chunk: list[list[str]] = [_tokenize(t) for t in chunk_texts]
 
-    # Start with chunk 0's tokens in full.
+    # Output is built chunk by chunk. For stitching, we only ever compare
+    # chunk N's tail against chunk N+1's head — never the full accumulated
+    # output. This avoids false matches against distant repetitions of
+    # similar text (e.g. a chorus that repeats minutes apart).
     out_tokens: list[str] = list(tokens_per_chunk[0])
+    prev_tokens: list[str] = list(tokens_per_chunk[0])
 
     for i in range(1, len(tokens_per_chunk)):
         next_tokens = tokens_per_chunk[i]
         if not next_tokens:
             continue
-        if not out_tokens:
-            out_tokens = list(next_tokens)
+        if not prev_tokens:
+            out_tokens.extend(next_tokens)
+            prev_tokens = list(next_tokens)
             continue
 
-        # Tail of accumulated output, head of next chunk.
+        # Tail of previous chunk, head of next chunk.  Window floor preserves
+        # the Addendum 3 deviation that lets small test chunks find their
+        # overlap; for realistic 24s chunks (~50–200 tokens) the floor is
+        # below the fraction-based window so behavior is unchanged.
         tail_len = min(
-            len(out_tokens),
-            max(MIN_ALIGN_WINDOW, int(len(out_tokens) * ALIGN_WINDOW_FRACTION)),
+            len(prev_tokens),
+            max(MIN_ALIGN_WINDOW, int(len(prev_tokens) * ALIGN_WINDOW_FRACTION)),
         )
         head_len = min(
             len(next_tokens),
             max(MIN_ALIGN_WINDOW, int(len(next_tokens) * ALIGN_WINDOW_FRACTION)),
         )
-        tail = out_tokens[-tail_len:]
+        tail = prev_tokens[-tail_len:]
         head = next_tokens[:head_len]
 
         length, tail_start, head_start = _longest_common_substring(tail, head)
 
-        if length >= MIN_MATCH_TOKENS:
-            # Absolute index in out_tokens where the match starts.
-            cut_out_at = len(out_tokens) - tail_len + tail_start
-            # Absolute index in next_tokens where the match ends.
+        if _is_acceptable_match(length, tail, tail_start):
+            # Replace the tail of the previous chunk in out_tokens with the
+            # matched region from prev_tokens, then append the unmatched
+            # portion of next_tokens. The matched region itself is taken
+            # from the previous chunk (slightly more reliable than chunk
+            # starts, which can show splice artifacts).
+            prev_match_end_in_prev = len(prev_tokens) - tail_len + tail_start + length
+            tokens_to_drop_from_out = len(prev_tokens) - prev_match_end_in_prev
+            if tokens_to_drop_from_out > 0:
+                out_tokens = out_tokens[:-tokens_to_drop_from_out]
+            # The matched region is already at the end of out_tokens at this
+            # point — we just need to append the post-match part of next.
             cut_next_at = head_start + length
-            # Keep out_tokens[:cut_out_at] + tail-match + next_tokens[cut_next_at:]
-            matched_region = tail[tail_start:tail_start + length]
-            out_tokens = out_tokens[:cut_out_at] + matched_region + list(next_tokens[cut_next_at:])
+            appended = list(next_tokens[cut_next_at:])
+            out_tokens.extend(appended)
             log.debug(
                 "Stitched chunk %d → %d: matched %d tokens (%r)",
-                i - 1, i, length, " ".join(matched_region),
+                i - 1, i, length,
+                " ".join(tail[tail_start:tail_start + length]),
             )
         else:
             # No reliable match — concatenate with a soft separator.
             # Use a newline so the unstitched join is visible in the .txt
             # output without inventing punctuation the model didn't emit.
-            out_tokens = out_tokens + ["\n"] + list(next_tokens)
+            out_tokens.append("\n")
+            out_tokens.extend(next_tokens)
             log.info(
                 "No alignment between chunk %d and %d (best match: %d tokens) "
                 "— falling back to concatenation.",
                 i - 1, i, length,
             )
+
+        prev_tokens = list(next_tokens)
 
     # Reassemble with single spaces, but preserve any "\n" sentinel we inserted.
     result_parts: list[str] = []

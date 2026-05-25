@@ -1018,3 +1018,12 @@ Qwen is intentionally **not** smoke-tested in CI — it requires GPU, is large t
 25. Re-running the Catrina stem through Qwen 4-bit shows no chunk-boundary gibberish ("Eless con piernas"-type failures).
 26. Whisper transcription is byte-for-byte unchanged — chunker code is reachable only via `QwenEngine`.
 27. Logs show `Qwen transcribing N.Ns of audio in M chunk(s).` followed by per-pair `Stitched chunk X → X+1: matched Y tokens` lines on a multi-chunk run.
+
+*(Addendum 4 — Pairwise matching + relaxed match threshold)*
+
+28. `stitch_chunks` matches against `prev_tokens` (immediately previous chunk only), not against the full accumulated output.
+29. `_is_acceptable_match` helper, `MIN_MATCH_TOKENS_STRICT`, `MIN_SINGLE_TOKEN_LENGTH`, and `_SINGLE_TOKEN_STOPLIST` are present in `_qwen_chunker.py`.
+30. Old `MIN_MATCH_TOKENS` constant is removed.
+31. Four new unit tests in `tests/test_transcribe.py` pass.
+32. All existing tests still pass.
+33. Re-running the Catrina stem through Qwen 4-bit produces a continuous second chorus with no `\n` fallback markers in that region.

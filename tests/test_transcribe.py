@@ -170,6 +170,66 @@ def test_qwen_stitcher_single_chunk() -> None:
     print("qwen_stitcher single chunk OK")
 
 
+def test_qwen_stitcher_avoids_distant_repetition() -> None:
+    """The matcher must only consider the immediately previous chunk.
+
+    Simulates a song where chunk 1 contains a chorus, chunk 2 contains a
+    verse, and chunk 3 contains the same chorus again. The chunk 2 → chunk 3
+    stitch must use chunk 2's tail (not chunk 1's), even though chunk 1
+    would match chunk 3 more completely.
+    """
+    from pipelines.transcribe_engines._qwen_chunker import stitch_chunks
+    chunk_1 = "feliz cumpleaños mi princesa eres mi sol mi fortaleza"
+    chunk_2 = "mi sol mi fortaleza con tu amor llenas mi vida cada sonrisa"
+    chunk_3 = "cada sonrisa es la salida catrina mi corazón te pertenece"
+    stitched = stitch_chunks([chunk_1, chunk_2, chunk_3])
+    # "feliz cumpleaños" must appear exactly once — the second chorus is
+    # not in any of these chunks.
+    assert stitched.lower().count("feliz cumpleaños") == 1, stitched
+    # "cada sonrisa" appears in both chunk 2 and chunk 3 and must be
+    # deduplicated cleanly.
+    assert stitched.lower().count("cada sonrisa") == 1, stitched
+    # And the full transcript should read sensibly.
+    assert "te pertenece" in stitched.lower()
+    print("qwen_stitcher distant-repetition OK")
+
+
+def test_qwen_stitcher_single_token_substantive() -> None:
+    """A single substantive token in the overlap region should stitch."""
+    from pipelines.transcribe_engines._qwen_chunker import stitch_chunks
+    # Overlap: one long content word (catrina). Stop-list words and short
+    # tokens are mixed in but shouldn't affect the acceptance decision.
+    chunk_a = "una reina en su día catrina"
+    chunk_b = "catrina mi corazón te pertenece"
+    stitched = stitch_chunks([chunk_a, chunk_b])
+    assert stitched.lower().count("catrina") == 1, stitched
+    assert "te pertenece" in stitched.lower()
+    print("qwen_stitcher single-token-substantive OK")
+
+
+def test_qwen_stitcher_single_token_stopword_rejected() -> None:
+    """A single stop-word match should fall back to concatenation."""
+    from pipelines.transcribe_engines._qwen_chunker import stitch_chunks
+    chunk_a = "uno dos tres cuatro de"
+    chunk_b = "de cinco seis siete ocho"
+    stitched = stitch_chunks([chunk_a, chunk_b])
+    # "de" is a Spanish stop word — match should be refused, both
+    # occurrences preserved.
+    assert stitched.lower().count("de") == 2, stitched
+    print("qwen_stitcher stopword-rejected OK")
+
+
+def test_qwen_stitcher_single_token_short_rejected() -> None:
+    """A single token shorter than MIN_SINGLE_TOKEN_LENGTH should be rejected."""
+    from pipelines.transcribe_engines._qwen_chunker import stitch_chunks
+    # "sol" is 3 chars, below the 4-char threshold.
+    chunk_a = "eres mi gran sol"
+    chunk_b = "sol que brilla mucho"
+    stitched = stitch_chunks([chunk_a, chunk_b])
+    assert stitched.lower().count("sol") == 2, stitched
+    print("qwen_stitcher short-token-rejected OK")
+
+
 if __name__ == "__main__":
     main()
     test_collapse_repetitions()
@@ -179,3 +239,7 @@ if __name__ == "__main__":
     test_qwen_stitcher_clean_overlap()
     test_qwen_stitcher_no_overlap_falls_back()
     test_qwen_stitcher_single_chunk()
+    test_qwen_stitcher_avoids_distant_repetition()
+    test_qwen_stitcher_single_token_substantive()
+    test_qwen_stitcher_single_token_stopword_rejected()
+    test_qwen_stitcher_single_token_short_rejected()
