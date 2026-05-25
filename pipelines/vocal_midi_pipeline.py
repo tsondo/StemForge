@@ -144,11 +144,12 @@ class VocalMidiConfig:
         ``"small"``, ``"medium"``).  Larger models are more accurate at the
         cost of load time and memory.  Default: ``"base"``.
     whisper_device:
-        Compute device for faster-whisper — ``"cpu"`` or ``"cuda"``.
-        Default: ``"cpu"``.
+        DEPRECATED.  Kept for backward compatibility; ignored.  The shared
+        :class:`~pipelines.transcribe_engines.WhisperEngine` selects the
+        device from the model's :class:`~models.registry.WhisperSpec`.
     whisper_compute_type:
-        CTranslate2 quantisation mode.  ``"int8"`` is the recommended default
-        for CPU; ``"float16"`` is preferred on CUDA.
+        DEPRECATED.  Kept for backward compatibility; ignored.  The shared
+        WhisperEngine selects compute type based on CUDA availability.
     demucs_model:
         Demucs model variant used for vocal isolation.  Must be one of the
         identifiers accepted by :func:`demucs.pretrained.get_model`.
@@ -362,8 +363,28 @@ class VocalMidiPipeline:
 
         from pipelines.transcribe_engines import WhisperEngine
 
+        # whisper_device / whisper_compute_type are deprecated and ignored
+        # since the WhisperEngine derives both from the registry spec and
+        # CUDA availability.  Warn if a caller still sets them to non-defaults.
+        if self._config.whisper_device != "cpu":
+            log.warning(
+                "VocalMidiConfig.whisper_device=%r is ignored; engine "
+                "uses the WhisperSpec's device field.",
+                self._config.whisper_device,
+            )
+        if self._config.whisper_compute_type != "int8":
+            log.warning(
+                "VocalMidiConfig.whisper_compute_type=%r is ignored; "
+                "engine selects compute type from CUDA availability.",
+                self._config.whisper_compute_type,
+            )
+
         whisper_model_id = f"whisper-{self._config.whisper_model_size}"
-        log.info("Loading transcribe engine for %s…", whisper_model_id)
+        log.info(
+            "Loading transcribe engine for %s "
+            "(vad_filter=True; word_timestamps=True)",
+            whisper_model_id,
+        )
         try:
             self._transcribe_engine = WhisperEngine(model_id=whisper_model_id)
             self._transcribe_engine.load()
