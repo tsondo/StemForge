@@ -168,39 +168,76 @@ class QwenEngine:
         text = self._processor.apply_chat_template(
             conversation, add_generation_prompt=True, tokenize=False,
         )
-        # NOTE: Qwen2AudioProcessor.__call__ takes `audio=` (singular).  The
-        # old `audios=` kwarg (still mentioned in some HF docstrings) is
-        # silently dropped — the processor then returns only input_ids and
-        # the model responds with "no audio provided".  Sampling rate must
-        # match proc.feature_extractor.sampling_rate (16 kHz for Qwen2-Audio).
-        inputs = self._processor(
-            text=text, audio=audio, sampling_rate=16_000,
-            return_tensors="pt", padding=True,
-        ).to(self._model.device)
 
-        try:
-            with torch.inference_mode():
-                generated_ids = self._model.generate(
-                    **inputs, max_new_tokens=1024, do_sample=False,
+        # Qwen2-Audio's encoder is a WhisperFeatureExtractor with a hard
+        # 30-second window (chunk_length=30, n_samples=480000).  Anything
+        # beyond 30 s is silently truncated.  For songs that's a problem —
+        # the model only sees the first 30 s and we get one line back.
+        # Transcribe in non-overlapping 30-second chunks; one
+        # TranscriptionSegment per chunk preserves timestamps for .srt.
+        chunk_samples = 30 * 16_000
+        total_samples = len(audio)
+        full_duration = float(total_samples) / 16_000.0
+
+        chunks = []
+        if total_samples <= chunk_samples:
+            chunks.append((0.0, full_duration, audio))
+        else:
+            for start_samp in range(0, total_samples, chunk_samples):
+                end_samp = min(start_samp + chunk_samples, total_samples)
+                chunks.append((
+                    start_samp / 16_000.0,
+                    end_samp / 16_000.0,
+                    audio[start_samp:end_samp],
+                ))
+            log.info(
+                "Qwen2-Audio: chunking %.1fs audio into %d × 30s segments",
+                full_duration, len(chunks),
+            )
+
+        segments: list[TranscriptionSegment] = []
+        text_parts: list[str] = []
+        for idx, (chunk_start, chunk_end, chunk_audio) in enumerate(chunks):
+            if len(chunks) > 1:
+                log.info(
+                    "Qwen2-Audio: chunk %d/%d (%.1f–%.1fs)",
+                    idx + 1, len(chunks), chunk_start, chunk_end,
                 )
-            generated_ids = generated_ids[:, inputs["input_ids"].size(1):]
-            output = self._processor.batch_decode(
-                generated_ids, skip_special_tokens=True,
-            )[0].strip()
-        except Exception as exc:
-            raise PipelineExecutionError(
-                f"Qwen2-Audio generation failed: {exc}",
-                pipeline_name="transcribe",
-            ) from exc
+            # NOTE: Qwen2AudioProcessor.__call__ takes `audio=` (singular).
+            # The old `audios=` kwarg (still mentioned in some HF docstrings)
+            # is silently dropped — the processor then returns only input_ids
+            # and the model responds with "no audio provided".  Sampling rate
+            # must match proc.feature_extractor.sampling_rate (16 kHz).
+            inputs = self._processor(
+                text=text, audio=chunk_audio, sampling_rate=16_000,
+                return_tensors="pt", padding=True,
+            ).to(self._model.device)
 
-        duration = float(len(audio)) / 16_000.0
-        segment = TranscriptionSegment(
-            start=0.0, end=duration, text=output, words=[],
-        )
+            try:
+                with torch.inference_mode():
+                    generated_ids = self._model.generate(
+                        **inputs, max_new_tokens=1024, do_sample=False,
+                    )
+                generated_ids = generated_ids[:, inputs["input_ids"].size(1):]
+                output = self._processor.batch_decode(
+                    generated_ids, skip_special_tokens=True,
+                )[0].strip()
+            except Exception as exc:
+                raise PipelineExecutionError(
+                    f"Qwen2-Audio generation failed at {chunk_start:.1f}s: {exc}",
+                    pipeline_name="transcribe",
+                ) from exc
+
+            segments.append(TranscriptionSegment(
+                start=chunk_start, end=chunk_end, text=output, words=[],
+            ))
+            if output:
+                text_parts.append(output)
+
         return TranscriptionResult(
-            text=output,
+            text="\n".join(text_parts),
             language=language,
-            segments=[segment],
+            segments=segments,
             has_word_timestamps=False,
             engine_id=self.engine_id,
             model_id=self.model_id,
