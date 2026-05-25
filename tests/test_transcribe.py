@@ -230,6 +230,47 @@ def test_qwen_stitcher_single_token_short_rejected() -> None:
     print("qwen_stitcher short-token-rejected OK")
 
 
+def test_qwen_prompt_construction() -> None:
+    """Verify the Qwen prompt assembler wraps hints correctly."""
+    from pipelines.transcribe_engines.qwen_engine import (
+        _build_qwen_prompt, _BASE_PROMPT,
+    )
+
+    # No hint, no language → bare base prompt.
+    assert _build_qwen_prompt(None, None) == _BASE_PROMPT
+    assert _build_qwen_prompt("", None) == _BASE_PROMPT
+    assert _build_qwen_prompt("   ", None) == _BASE_PROMPT
+
+    # Hint only → wrapper applied, anti-translation language present.
+    out = _build_qwen_prompt("Catrina, Feliz cumpleaños", None)
+    assert "Catrina, Feliz cumpleaños" in out
+    assert "Use these spellings exactly" in out
+    assert "Do not translate or summarize" in out
+    assert out.startswith(_BASE_PROMPT)
+
+    # Language only, no hint → language suffix present, no wrapper.
+    out = _build_qwen_prompt(None, "Spanish")
+    assert "lyrics are in Spanish" in out
+    assert "Use these spellings exactly" not in out
+
+    # Hint + language → both present, hint wrapper precedes language suffix.
+    out = _build_qwen_prompt("Catrina", "Spanish")
+    assert "Catrina" in out
+    assert "Use these spellings exactly" in out
+    assert "lyrics are in Spanish" in out
+    # Wrapper must come before the language suffix so the language hint
+    # doesn't get absorbed into the anti-translation clause.
+    assert out.index("Use these spellings exactly") < out.index("lyrics are in Spanish")
+
+    # Multi-line / quote-laden hint should be sanitized to one line.
+    out = _build_qwen_prompt('Line one\nLine "two"\nLine three', None)
+    assert "\n" not in out
+    assert '"' not in out
+    assert "Line one Line 'two' Line three" in out
+
+    print("qwen_prompt_construction OK")
+
+
 if __name__ == "__main__":
     main()
     test_collapse_repetitions()
@@ -243,3 +284,4 @@ if __name__ == "__main__":
     test_qwen_stitcher_single_token_substantive()
     test_qwen_stitcher_single_token_stopword_rejected()
     test_qwen_stitcher_single_token_short_rejected()
+    test_qwen_prompt_construction()

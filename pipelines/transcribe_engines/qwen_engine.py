@@ -23,11 +23,42 @@ from .types import (
 log = logging.getLogger(__name__)
 
 _QWEN_REPO = "Qwen/Qwen2-Audio-7B-Instruct"
-_PROMPT = (
+_BASE_PROMPT = (
     "Transcribe the lyrics of this audio. Output only the lyrics text, "
     "preserving line breaks where the singer pauses. Do not add commentary, "
     "explanations, or section labels."
 )
+_HINT_WRAPPER = (
+    " Names and key terms that may appear in the lyrics: {hint}. "
+    "Use these spellings exactly. Do not translate or summarize — "
+    "output only the verbatim transcribed lyrics."
+)
+
+
+def _build_qwen_prompt(hint: str | None, language: str | None) -> str:
+    """Construct Qwen's chat-template instruction text.
+
+    The hint, when present, is wrapped with explicit framing so the model
+    treats it as vocabulary guidance rather than as additional task
+    instruction. The wrapper re-asserts the original task immediately after
+    the hint to prevent the model from drifting into translation or
+    summarization when the hint contains text in a different language than
+    the surrounding instruction.
+
+    A trailing language suffix is appended when language is set, mirroring
+    the existing behavior from the parent spec.
+    """
+    prompt = _BASE_PROMPT
+    hint_clean = (hint or "").strip()
+    if hint_clean:
+        # Sanitize hint to a single line — newlines or stray quotes inside the
+        # user's input could affect the model's parse of the wrapper.
+        hint_clean = " ".join(hint_clean.split()).replace('"', "'")
+        prompt += _HINT_WRAPPER.format(hint=hint_clean)
+    if language:
+        prompt += f" The lyrics are in {language}."
+    return prompt
+
 
 Quantization = Literal["none", "nf4"]
 
@@ -211,9 +242,7 @@ class QwenEngine:
         prompt: str | None,
     ) -> str:
         """Run a single Qwen forward pass on one audio chunk."""
-        user_prompt = prompt or _PROMPT
-        if language:
-            user_prompt += f" The lyrics are in {language}."
+        user_prompt = _build_qwen_prompt(hint=prompt, language=language)
         conversation = [
             {"role": "user", "content": [
                 {"type": "audio", "audio_url": "in_memory"},

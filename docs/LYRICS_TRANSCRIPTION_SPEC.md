@@ -1036,3 +1036,13 @@ Qwen is intentionally **not** smoke-tested in CI — it requires GPU, is large t
 37. Transcribe requests include the `prompt` field only when the hint is non-empty.
 38. `New Session` clears `appState.lyricsHint`.
 39. Manual hint test against the Catrina stem with Qwen 4-bit shows reduced proper-noun drift compared to the no-hint baseline from Addendum 4.
+
+*(Addendum 6 — Qwen hint wrapper with anti-translation anchor)*
+
+40. `qwen_engine.py` exposes a `_build_qwen_prompt(hint, language) -> str` helper that wraps non-empty hints with explicit vocabulary-guidance framing and anti-translation anchoring.
+41. `_BASE_PROMPT` and `_HINT_WRAPPER` module constants present; old `_PROMPT` reference removed.
+42. `_transcribe_chunk` calls `_build_qwen_prompt` instead of inline assembly.
+43. `test_qwen_prompt_construction` unit test passes.
+44. All existing tests in `tests/test_transcribe.py` continue to pass.
+45. Manual hint test on Catrina stem with Qwen 4-bit shows verbatim Spanish lyrics (no "The lyrics translate to..." prefix) and uses the hint's spelling for proper nouns.
+46. Whisper engine code is byte-for-byte unchanged.
