@@ -1178,6 +1178,88 @@ input[type="range"]::-moz-range-track {
   color: var(--accent);
 }
 
+/* ─── MIDI Mode Bar (Notes | Lyrics) ─────────────────────────────── */
+
+.midi-mode-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
+.midi-mode-selector {
+  display: flex;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.midi-mode-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 7px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+  transition: color 0.15s, background 0.15s;
+}
+
+.midi-mode-btn:last-child { border-right: none; }
+
+.midi-mode-btn:hover {
+  color: var(--text-dim);
+  background: var(--surface-overlay);
+}
+
+.midi-mode-btn.active {
+  background: var(--accent-dim-compose);
+  color: var(--accent);
+}
+
+/* Lyrics result card */
+.lyrics-text {
+  width: 100%;
+  min-height: 280px;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, monospace);
+  font-size: 13px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--text);
+  resize: vertical;
+}
+
+.lyrics-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.lyrics-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 3px;
+  background: var(--surface-overlay);
+  color: var(--text-dim);
+}
+
+.lyrics-notice {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 6px 10px;
+  margin-top: 8px;
+  background: var(--surface-overlay);
+  border-radius: 4px;
+}
+
 /* ─── Create Tabs (My Lyrics / AI Lyrics / Instrumental) ────────────── */
 
 .compose-create-tabs {

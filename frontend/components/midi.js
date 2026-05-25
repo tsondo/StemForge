@@ -33,10 +33,22 @@ function stopOtherPlayers(except) {
 
 export function initMidi() {
   const panel = document.getElementById('panel-midi');
+
+  // ─── Mode bar (Notes | Lyrics) ───
+  const modeBar = el('div', { className: 'midi-mode-bar' },
+    el('div', { className: 'midi-mode-selector' },
+      el('button', { className: 'midi-mode-btn active', 'data-mode': 'notes', onClick: () => switchMidiMode('notes') }, 'Notes'),
+      el('button', { className: 'midi-mode-btn', 'data-mode': 'lyrics', onClick: () => switchMidiMode('lyrics') }, 'Lyrics'),
+    ),
+  );
+  panel.appendChild(modeBar);
+
   const layout = el('div', { className: 'two-col' });
 
   // ─── Left: controls ───
   const left = el('div', { className: 'col-left' });
+  const notesControls = el('div', { id: 'midi-controls-notes' });
+  const lyricsControls = el('div', { id: 'midi-controls-lyrics', style: { display: 'none' } });
 
   const stemSection = el('div', { className: 'form-group' },
     el('label', {}, 'Stems to process'),
@@ -104,10 +116,73 @@ export function initMidi() {
   const importInput = el('input', { type: 'file', accept: '.mid,.midi', style: { display: 'none' }, id: 'midi-import-input' });
   const importBtn = el('button', { className: 'btn btn-sm', id: 'midi-import' }, 'Import MIDI file');
 
-  left.append(stemSection, keyGroup, bpmGroup, tsGroup, onsetGroup, frameGroup, sf2Group, extractBtn, importInput, importBtn);
+  notesControls.append(stemSection, keyGroup, bpmGroup, tsGroup, onsetGroup, frameGroup, sf2Group, extractBtn, importInput, importBtn);
+  left.append(notesControls, lyricsControls);
+
+  // ─── Lyrics control panel ───
+  const lyricsSourceLabel = el('label', { className: 'field-label' }, 'Source Audio');
+  const lyricsSourceSelect = el('select', { id: 'lyrics-source', className: 'select' });
+  const lyricsSourceGroup = el('div', { className: 'form-group' },
+    lyricsSourceLabel, lyricsSourceSelect,
+  );
+
+  const lyricsEngineLabel = el('label', { className: 'field-label' }, 'Engine');
+  const lyricsEngineSelect = el('select', { id: 'lyrics-engine', className: 'select' });
+  const lyricsEngineGroup = el('div', { className: 'form-group' },
+    lyricsEngineLabel, lyricsEngineSelect,
+  );
+
+  const lyricsLangLabel = el('label', { className: 'field-label' }, 'Language');
+  const lyricsLangSelect = el('select', { id: 'lyrics-language', className: 'select' },
+    el('option', { value: '' }, 'Auto-detect'),
+    el('option', { value: 'en' }, 'English'),
+    el('option', { value: 'zh' }, 'Chinese'),
+    el('option', { value: 'ja' }, 'Japanese'),
+    el('option', { value: 'ko' }, 'Korean'),
+    el('option', { value: 'es' }, 'Spanish'),
+    el('option', { value: 'fr' }, 'French'),
+    el('option', { value: 'de' }, 'German'),
+    el('option', { value: 'pt' }, 'Portuguese'),
+    el('option', { value: 'it' }, 'Italian'),
+    el('option', { value: 'ru' }, 'Russian'),
+    el('option', { value: 'ar' }, 'Arabic'),
+    el('option', { value: 'hi' }, 'Hindi'),
+  );
+  const lyricsLangGroup = el('div', { className: 'form-group' }, lyricsLangLabel, lyricsLangSelect);
+
+  const fmtTxt = el('input', { type: 'checkbox', id: 'lyrics-fmt-txt', checked: 'true', disabled: 'true' });
+  const fmtLrc = el('input', { type: 'checkbox', id: 'lyrics-fmt-lrc', checked: 'true' });
+  const fmtSrt = el('input', { type: 'checkbox', id: 'lyrics-fmt-srt', checked: 'true' });
+  const lyricsFmtGroup = el('div', { className: 'form-group' },
+    el('label', {}, 'Output formats'),
+    el('div', { className: 'checkbox-group' },
+      el('label', {}, fmtTxt, ' .txt (always)'),
+      el('label', {}, fmtLrc, ' .lrc'),
+      el('label', {}, fmtSrt, ' .srt'),
+    ),
+  );
+
+  const lyricsCoarseNotice = el('div', { className: 'lyrics-notice hidden', id: 'lyrics-coarse-notice' },
+    'Qwen produces segment-level timing; .lrc and .srt use coarse timestamps.',
+  );
+
+  const lyricsTranscribeBtn = el('button', { className: 'btn btn-primary', id: 'lyrics-transcribe', disabled: 'true' },
+    'Transcribe',
+  );
+
+  const lyricsLoadHint = el('div', { className: 'text-dim hidden', id: 'lyrics-load-hint' },
+    'Load audio or run separation first. Lyrics transcription works best on an isolated vocal stem.',
+  );
+
+  lyricsControls.append(
+    lyricsSourceGroup, lyricsEngineGroup, lyricsLangGroup, lyricsFmtGroup,
+    lyricsCoarseNotice, lyricsTranscribeBtn, lyricsLoadHint,
+  );
 
   // ─── Right: results ───
   const right = el('div', { className: 'col-right' });
+  const notesResults = el('div', { id: 'midi-results-notes' });
+  const lyricsResults = el('div', { id: 'midi-results-lyrics', style: { display: 'none' } });
 
   const progressCard = el('div', { className: 'card hidden', id: 'midi-progress' },
     el('div', { className: 'progress-container' },
@@ -122,8 +197,24 @@ export function initMidi() {
   );
 
   const resultsContainer = el('div', { id: 'midi-results' });
+  notesResults.append(progressCard, resultsContainer);
 
-  right.append(progressCard, resultsContainer);
+  const lyricsProgressCard = el('div', { className: 'card hidden', id: 'lyrics-progress' },
+    el('div', { className: 'progress-container' },
+      el('div', { className: 'progress-bar' },
+        el('div', { className: 'progress-fill', id: 'lyrics-progress-fill' }),
+      ),
+      el('div', { className: 'progress-label' },
+        el('span', { id: 'lyrics-stage' }, ''),
+        el('span', { id: 'lyrics-pct' }, '0%'),
+      ),
+    ),
+  );
+
+  const lyricsResultContainer = el('div', { id: 'lyrics-result' });
+  lyricsResults.append(lyricsProgressCard, lyricsResultContainer);
+
+  right.append(notesResults, lyricsResults);
   layout.append(left, right);
   panel.appendChild(layout);
 
@@ -162,6 +253,15 @@ export function initMidi() {
   loadGmPrograms();
   loadCurrentSoundfont();
   checkLilypondAvailability();
+
+  // Lyrics-mode wiring
+  loadLyricsEngines();
+  refreshLyricsSources();
+  document.getElementById('lyrics-engine').addEventListener('change', onLyricsEngineChange);
+  document.getElementById('lyrics-transcribe').addEventListener('click', startLyricsTranscription);
+
+  appState.on('fileLoaded', refreshLyricsSources);
+  appState.on('stemsReady', refreshLyricsSources);
 }
 
 async function loadGmPrograms() {
@@ -912,4 +1012,211 @@ async function showSheetMusicPanel(panel, musicxml, label) {
     renderTarget.appendChild(el('div', { className: 'banner banner-error' },
       `Notation render failed: ${err.message}`));
   }
+}
+
+// ─── Lyrics mode ────────────────────────────────────────────────────
+
+let _midiMode = 'notes';
+let _lyricsEngines = [];
+
+function switchMidiMode(mode) {
+  if (mode === _midiMode) return;
+  _midiMode = mode;
+
+  document.querySelectorAll('#panel-midi .midi-mode-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === mode),
+  );
+
+  document.getElementById('midi-controls-notes').style.display = mode === 'notes' ? '' : 'none';
+  document.getElementById('midi-controls-lyrics').style.display = mode === 'lyrics' ? '' : 'none';
+  document.getElementById('midi-results-notes').style.display = mode === 'notes' ? '' : 'none';
+  document.getElementById('midi-results-lyrics').style.display = mode === 'lyrics' ? '' : 'none';
+
+  if (mode === 'lyrics') refreshLyricsSources();
+}
+
+async function loadLyricsEngines() {
+  try {
+    const data = await api('/transcribe/engines');
+    _lyricsEngines = data.engines || [];
+    const sel = document.getElementById('lyrics-engine');
+    clearChildren(sel);
+    for (const e of _lyricsEngines) {
+      for (const m of e.models) {
+        const suffix = e.available ? '' : ' (GPU required)';
+        const opt = el('option', { value: JSON.stringify({ engine_id: e.engine_id, model_id: m.model_id }) },
+          `${m.display_name}${suffix}`);
+        if (!e.available) opt.disabled = true;
+        sel.appendChild(opt);
+      }
+    }
+    // Default to whisper-base if present
+    const defaultOpt = Array.from(sel.options).find(o => {
+      try { return JSON.parse(o.value).model_id === 'whisper-base'; } catch { return false; }
+    });
+    if (defaultOpt) sel.value = defaultOpt.value;
+    onLyricsEngineChange();
+  } catch (err) {
+    /* leave engine list empty — user will see disabled transcribe button */
+  }
+}
+
+function onLyricsEngineChange() {
+  const sel = document.getElementById('lyrics-engine');
+  if (!sel.value) return;
+  let parsed;
+  try { parsed = JSON.parse(sel.value); } catch { return; }
+  const engine = _lyricsEngines.find(e => e.engine_id === parsed.engine_id);
+  const notice = document.getElementById('lyrics-coarse-notice');
+  if (engine && !engine.supports_word_timestamps) {
+    notice.classList.remove('hidden');
+  } else {
+    notice.classList.add('hidden');
+  }
+}
+
+function refreshLyricsSources() {
+  const sel = document.getElementById('lyrics-source');
+  if (!sel) return;
+  clearChildren(sel);
+
+  const sources = [];
+  // Separated stems first
+  for (const [label, path] of Object.entries(appState.stemPaths || {})) {
+    sources.push({ label: `Stem: ${label}`, path, isVocal: /vocal/i.test(label) });
+  }
+  // Enhanced stems if any
+  for (const [label, path] of Object.entries(appState.enhancePaths || {})) {
+    sources.push({ label: `Enhanced: ${label}`, path, isVocal: /vocal/i.test(label) });
+  }
+  // Uploaded full mix
+  if (appState.audioPath) {
+    sources.push({ label: 'Full Mix (Original Upload)', path: appState.audioPath, isVocal: false });
+  }
+
+  const transcribeBtn = document.getElementById('lyrics-transcribe');
+  const loadHint = document.getElementById('lyrics-load-hint');
+
+  if (sources.length === 0) {
+    sel.appendChild(el('option', { value: '' }, 'No audio available'));
+    transcribeBtn.disabled = true;
+    loadHint.classList.remove('hidden');
+    return;
+  }
+
+  loadHint.classList.add('hidden');
+  for (const s of sources) {
+    sel.appendChild(el('option', { value: s.path }, s.label));
+  }
+  // Prefer the first vocal stem if present
+  const vocal = sources.find(s => s.isVocal);
+  if (vocal) sel.value = vocal.path;
+  transcribeBtn.disabled = false;
+}
+
+async function startLyricsTranscription() {
+  const sourceSel = document.getElementById('lyrics-source');
+  const engineSel = document.getElementById('lyrics-engine');
+  const langSel = document.getElementById('lyrics-language');
+  const fmtLrc = document.getElementById('lyrics-fmt-lrc');
+  const fmtSrt = document.getElementById('lyrics-fmt-srt');
+  const transcribeBtn = document.getElementById('lyrics-transcribe');
+
+  const path = sourceSel.value;
+  if (!path) return;
+
+  let engineCfg;
+  try { engineCfg = JSON.parse(engineSel.value); } catch { return; }
+
+  const formats = ['txt'];
+  if (fmtLrc.checked) formats.push('lrc');
+  if (fmtSrt.checked) formats.push('srt');
+
+  const progressCard = document.getElementById('lyrics-progress');
+  const resultContainer = document.getElementById('lyrics-result');
+  progressCard.classList.remove('hidden');
+  clearChildren(resultContainer);
+  transcribeBtn.disabled = true;
+
+  try {
+    const { job_id } = await api('/transcribe', {
+      method: 'POST',
+      body: JSON.stringify({
+        audio_path: path,
+        engine_id: engineCfg.engine_id,
+        model_id: engineCfg.model_id,
+        language: langSel.value || null,
+        formats,
+      }),
+    });
+
+    pollJob(job_id, {
+      onProgress(progress, stage) {
+        document.getElementById('lyrics-progress-fill').style.width = `${(progress * 100).toFixed(0)}%`;
+        document.getElementById('lyrics-pct').textContent = `${(progress * 100).toFixed(0)}%`;
+        document.getElementById('lyrics-stage').textContent = stage || '';
+      },
+      onDone(result) {
+        progressCard.classList.add('hidden');
+        transcribeBtn.disabled = false;
+        renderLyricsResult(result);
+        appState.lyricsPaths = { ...(appState.lyricsPaths || {}), ...result.output_paths };
+        appState.emit('lyricsReady', result);
+      },
+      onError(msg) {
+        progressCard.classList.add('hidden');
+        transcribeBtn.disabled = false;
+        resultContainer.appendChild(
+          el('div', { className: 'banner banner-error' }, `Transcription failed: ${msg}`),
+        );
+      },
+    });
+  } catch (err) {
+    progressCard.classList.add('hidden');
+    transcribeBtn.disabled = false;
+    resultContainer.appendChild(
+      el('div', { className: 'banner banner-error' }, `Error: ${err.message}`),
+    );
+  }
+}
+
+function renderLyricsResult(result) {
+  const container = document.getElementById('lyrics-result');
+  const card = el('div', { className: 'card' });
+
+  const meta = el('div', { className: 'lyrics-meta' },
+    el('span', { className: 'lyrics-badge' }, `engine: ${result.engine_id}`),
+    el('span', { className: 'lyrics-badge' }, `model: ${result.model_id}`),
+    result.language ? el('span', { className: 'lyrics-badge' }, `language: ${result.language}`) : null,
+    el('span', { className: 'lyrics-badge' }, `segments: ${result.segment_count}`),
+  );
+
+  const textarea = el('textarea', {
+    className: 'lyrics-text',
+    readonly: 'true',
+    spellcheck: 'false',
+  });
+  textarea.value = result.text || '(empty transcript)';
+
+  const actions = el('div', { className: 'stem-actions', style: { marginTop: '10px', display: 'flex', gap: '8px', flexWrap: 'wrap' } });
+  for (const [fmt, path] of Object.entries(result.output_paths)) {
+    const btn = el('button', {
+      className: 'btn btn-sm',
+      onClick: () => {
+        const name = path.split('/').pop() || `lyrics.${fmt}`;
+        saveFileAs(`/api/audio/download?path=${encodeURIComponent(path)}`, name);
+      },
+    }, `Save .${fmt}`);
+    actions.appendChild(btn);
+  }
+  const sendBtn = el('button', {
+    className: 'btn btn-sm btn-primary',
+    onClick: () => {
+      appState.emit('lyricsSendToCompose', result);
+    },
+  }, 'Send to Compose');
+  actions.appendChild(sendBtn);
+
+  card.append(meta, textarea, actions);
+  container.appendChild(card);
 }

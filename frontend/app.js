@@ -30,6 +30,7 @@ export const appState = {
   sfxPaths: {},
   voicePaths: {},
   enhancePaths: {},
+  lyricsPaths: {},
 };
 
 // ─── API Helpers ────────────────────────────────────────────────────────
