@@ -1027,3 +1027,12 @@ Qwen is intentionally **not** smoke-tested in CI — it requires GPU, is large t
 31. Four new unit tests in `tests/test_transcribe.py` pass.
 32. All existing tests still pass.
 33. Re-running the Catrina stem through Qwen 4-bit produces a continuous second chorus with no `\n` fallback markers in that region.
+
+*(Addendum 5 — Surface the Hint field in the Lyrics UI)*
+
+34. MIDI Lyrics control panel contains a `Hint (optional)` text input between Language and Output formats, with the tooltip and placeholder text specified in §2.
+35. `maxlength` of 224 characters enforced via HTML attribute.
+36. Hint value persists in `appState.lyricsHint` across Notes/Lyrics mode switches.
+37. Transcribe requests include the `prompt` field only when the hint is non-empty.
+38. `New Session` clears `appState.lyricsHint`.
+39. Manual hint test against the Catrina stem with Qwen 4-bit shows reduced proper-noun drift compared to the no-hint baseline from Addendum 4.

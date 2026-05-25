@@ -32,6 +32,7 @@ export const appState = {
   enhancePaths: {},
   lyricsPaths: {},
   lyricsEngineId: null,    // remembered Lyrics-mode engine selection (per session)
+  lyricsHint: '',          // Hint (optional) text — biases the transcription model
 };
 
 // ─── API Helpers ────────────────────────────────────────────────────────

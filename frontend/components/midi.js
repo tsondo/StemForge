@@ -154,6 +154,24 @@ export function initMidi() {
   );
   const lyricsLangGroup = el('div', { className: 'form-group' }, lyricsLangLabel, lyricsLangSelect);
 
+  // Hint field — biases the transcription model toward specific vocabulary.
+  // Plumbed through TranscribeRequest.prompt for both engines.  The panel is
+  // built once and only show/hidden by switchMidiMode, so the input value
+  // survives mode switches naturally — no explicit restore needed.
+  const lyricsHintGroup = el('div', { className: 'form-group' },
+    el('label', { 'for': 'midi-lyrics-hint', className: 'field-label' }, 'Hint (optional)'),
+    el('input', {
+      type: 'text',
+      id: 'midi-lyrics-hint',
+      className: 'midi-lyrics-hint-input',
+      maxlength: '224',
+      placeholder: 'Song title, names, key phrases — e.g. "Catrina, Feliz cumpleaños"',
+      title: 'Words and phrases here will bias the transcription model toward similar vocabulary. Useful for proper nouns (names, places), song titles, recurring phrases the model gets wrong, and uncommon spellings. Works with both Whisper and Qwen engines. Keep it short — a single line of the most distinctive terms is enough.',
+      value: appState.lyricsHint || '',
+      onInput: (e) => { appState.lyricsHint = e.target.value; },
+    }),
+  );
+
   const fmtTxt = el('input', { type: 'checkbox', id: 'lyrics-fmt-txt', checked: 'true', disabled: 'true' });
   const fmtLrc = el('input', { type: 'checkbox', id: 'lyrics-fmt-lrc', checked: 'true' });
   const fmtSrt = el('input', { type: 'checkbox', id: 'lyrics-fmt-srt', checked: 'true' });
@@ -215,7 +233,7 @@ export function initMidi() {
   );
 
   lyricsControls.append(
-    lyricsSourceGroup, lyricsEngineGroup, lyricsLangGroup, lyricsFmtGroup,
+    lyricsSourceGroup, lyricsEngineGroup, lyricsLangGroup, lyricsHintGroup, lyricsFmtGroup,
     lyricsCoarseNotice, lyricsAdvanced, lyricsTranscribeBtn, lyricsLoadHint,
   );
 
@@ -1248,23 +1266,30 @@ async function startLyricsTranscription() {
   const condCheck = document.getElementById('lyrics-condition-on-previous');
   const collapseCheck = document.getElementById('lyrics-collapse-reps');
   const maxRunInput = document.getElementById('lyrics-max-run');
+  const hintInput = document.getElementById('midi-lyrics-hint');
   const conditionOnPrevious = condCheck ? condCheck.checked : false;
   const collapseReps = collapseCheck ? collapseCheck.checked : true;
   const maxRun = maxRunInput ? Math.max(2, Math.min(20, parseInt(maxRunInput.value, 10) || 4)) : 4;
+  const hintValue = (hintInput?.value || '').trim();
 
   try {
+    const payload = {
+      audio_path: path,
+      engine_id: engineCfg.engine_id,
+      model_id: engineCfg.model_id,
+      language: langSel.value || null,
+      formats,
+      condition_on_previous_text: conditionOnPrevious,
+      collapse_repetitions: collapseReps,
+      max_repetition_run: maxRun,
+    };
+    // Only send `prompt` when non-empty; matches the backend's
+    // `prompt: str | None = None` shape and keeps the wire payload clean.
+    if (hintValue) payload.prompt = hintValue;
+
     const { job_id } = await api('/transcribe', {
       method: 'POST',
-      body: JSON.stringify({
-        audio_path: path,
-        engine_id: engineCfg.engine_id,
-        model_id: engineCfg.model_id,
-        language: langSel.value || null,
-        formats,
-        condition_on_previous_text: conditionOnPrevious,
-        collapse_repetitions: collapseReps,
-        max_repetition_run: maxRun,
-      }),
+      body: JSON.stringify(payload),
     });
 
     pollJob(job_id, {
