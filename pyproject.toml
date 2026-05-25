@@ -85,9 +85,7 @@ dependencies = [
     "torchsde>=0.2.6",
     "transformers>=4.40.0",
     "accelerate>=0.30.0",
-    # 4-bit quantization for Qwen2-Audio (lyrics transcription, NF4 variant)
-    "bitsandbytes>=0.43.0",
-    # Qwen3-ASR — purpose-built ASR for the Lyrics tab (Addendum 8 migration)
+    # Qwen3-ASR — purpose-built ASR for the Lyrics tab (Addendum 8)
     "qwen-asr>=0.0.6",
     "safetensors>=0.4.2",
     "einops>=0.7.0",

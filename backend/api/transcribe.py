@@ -47,31 +47,6 @@ def list_engines() -> dict:
                 {"model_id": s.model_id, "display_name": s.display_name}
                 for s in list_specs(WhisperSpec)
             ]
-        elif engine_id == "qwen":
-            from pipelines.transcribe_engines.qwen_engine import QWEN_VARIANTS
-
-            # NF4 needs both bitsandbytes and transformers' BitsAndBytesConfig.
-            # If either import fails the 4-bit variant is reported as unavailable
-            # so the frontend can grey it out with a clear reason.
-            bnb_available = True
-            try:
-                from transformers import BitsAndBytesConfig  # noqa: F401
-                import bitsandbytes  # noqa: F401
-            except ImportError:
-                bnb_available = False
-
-            qwen_models = []
-            for mid, v in QWEN_VARIANTS.items():
-                model_available = cuda
-                if v["quantization"] == "nf4" and not bnb_available:
-                    model_available = False
-                qwen_models.append({
-                    "model_id": mid,
-                    "display_name": v["display_name"],
-                    "approx_vram_gb": v["approx_vram_gb"],
-                    "available": model_available,
-                })
-            info["models"] = qwen_models
         elif engine_id == "qwen3-asr":
             from pipelines.transcribe_engines.qwen3_asr_engine import (
                 QWEN3_ASR_VARIANTS,

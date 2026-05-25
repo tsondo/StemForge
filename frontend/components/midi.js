@@ -1104,21 +1104,7 @@ function annotateEngineOption(engine, model) {
     return label;
   }
 
-  // Qwen variants — show VRAM and mark unavailable cases explicitly.
-  if (engine.engine_id === 'qwen') {
-    const vram = model.approx_vram_gb ? `~${model.approx_vram_gb} GB VRAM` : 'GPU only';
-    const modelAvail = (typeof model.available === 'boolean') ? model.available : engine.available;
-    if (!modelAvail) {
-      // Distinguish bitsandbytes missing (CUDA up but NF4 unsupported) from no-CUDA.
-      if (engine.available) {
-        return `${label} (GPU required — ${vram}, bitsandbytes not installed)`;
-      }
-      return `${label} (GPU required — ${vram}, unavailable)`;
-    }
-    return `${label} (GPU required — ${vram})`;
-  }
-
-  // Qwen3-ASR variants — purpose-built ASR engine added in Addendum 8.
+  // Qwen3-ASR variants — purpose-built ASR engine, replaces Qwen2-Audio.
   if (engine.engine_id === 'qwen3-asr') {
     const vram = model.approx_vram_gb ? `~${model.approx_vram_gb} GB VRAM` : 'GPU only';
     const modelAvail = (typeof model.available === 'boolean') ? model.available : engine.available;

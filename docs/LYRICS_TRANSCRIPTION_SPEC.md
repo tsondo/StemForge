@@ -1065,3 +1065,16 @@ Qwen is intentionally **not** smoke-tested in CI — it requires GPU, is large t
 57. All other existing tests continue to pass.
 58. Whisper engine, stitcher, pipeline, API, frontend all unchanged.
 59. Re-running the Catrina diagnostic from Phase 1 shows per-chunk char counts substantially improved over the bimodal 26/196-char Phase 1 baseline.
+
+*(Addendum 8 — Replace Qwen2-Audio with Qwen3-ASR)*
+
+66. `pipelines/transcribe_engines/qwen3_asr_engine.py` exists with `Qwen3AsrEngine` class and `QWEN3_ASR_VARIANTS` registry.
+67. Engine registry `ENGINES` maps `"qwen3-asr"` to `Qwen3AsrEngine`. The `"qwen"` key is removed.
+68. `pipelines/transcribe_engines/qwen_engine.py` and `pipelines/transcribe_engines/_qwen_chunker.py` are deleted.
+69. All Qwen2-Audio unit tests in `tests/test_transcribe.py` are removed. New `test_qwen3_asr_engine_registration` and `test_qwen3_asr_language_resolution` pass.
+70. `pyproject.toml` includes `qwen-asr` (>=0.0.6). `bitsandbytes` is removed. `uv.lock` is refreshed.
+71. `licenses/LICENSE-Qwen3-ASR` exists with the upstream Apache 2.0 text. `licenses/LICENSE-Qwen2-Audio` is removed.
+72. `ACKNOWLEDGMENTS.md` has a Qwen3-ASR entry; Qwen2-Audio and bitsandbytes entries are removed.
+73. MIDI Lyrics dropdown shows three Whisper variants + two Qwen3-ASR variants (1.7B and 0.6B).
+74. Manual validation on the Catrina stem produces clean Spanish lyrics with no SRT, no Chinese, no hint-only output, and final length comparable to Whisper Large v3.
+75. `grep -rn "Qwen2-Audio\|qwen2-audio\|QwenEngine\|_qwen_chunker" --include='*.py' --include='*.md'` returns no functional references (only historical mentions in addendum docs, which are fine).

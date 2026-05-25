@@ -346,20 +346,6 @@ wheels = [
 ]
 
 [[package]]
-name = "bitsandbytes"
-version = "0.49.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy", marker = "sys_platform == 'linux'" },
-    { name = "packaging", marker = "sys_platform == 'linux'" },
-    { name = "torch", marker = "sys_platform == 'linux'" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/29/71/acff7af06c818664aa87ff73e17a52c7788ad746b72aea09d3cb8e424348/bitsandbytes-0.49.2-py3-none-manylinux_2_24_aarch64.whl", hash = "sha256:2fc0830c5f7169be36e60e11f2be067c8f812dfcb829801a8703735842450750", size = 31442815, upload-time = "2026-02-16T21:26:06.783Z" },
-    { url = "https://files.pythonhosted.org/packages/19/57/3443d6f183436fbdaf5000aac332c4d5ddb056665d459244a5608e98ae92/bitsandbytes-0.49.2-py3-none-manylinux_2_24_x86_64.whl", hash = "sha256:54b771f06e1a3c73af5c7f16ccf0fc23a846052813d4b008d10cb6e017dd1c8c", size = 60651714, upload-time = "2026-02-16T21:26:11.579Z" },
-]
-
-[[package]]
 name = "blinker"
 version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2624,7 +2610,6 @@ dependencies = [
     { name = "ace-step", marker = "sys_platform == 'linux'" },
     { name = "ai-edge-litert", marker = "sys_platform == 'linux'" },
     { name = "audio-separator", marker = "sys_platform == 'linux'" },
-    { name = "bitsandbytes", marker = "sys_platform == 'linux'" },
     { name = "bs-roformer", marker = "sys_platform == 'linux'" },
     { name = "demucs", marker = "sys_platform == 'linux'" },
     { name = "diffq", marker = "sys_platform == 'linux'" },
@@ -2696,7 +2681,6 @@ requires-dist = [
     { name = "ace-step", editable = "Ace-Step-Wrangler/vendor/ACE-Step-1.5" },
     { name = "ai-edge-litert", specifier = ">=1.1.0" },
     { name = "audio-separator", directory = "vendor/python-audio-separator" },
-    { name = "bitsandbytes", specifier = ">=0.43.0" },
     { name = "bs-roformer", specifier = ">=0.3.2" },
     { name = "demucs", git = "https://github.com/facebookresearch/demucs.git?rev=v4.0.1" },
     { name = "diffq", specifier = "==0.2.4" },

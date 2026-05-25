@@ -138,9 +138,9 @@ In Lyrics mode:
 1. Pick a **Source** — a separated stem (vocal recommended), an enhanced stem, or the originally uploaded full mix.
 2. Pick an **Engine** — five options total:
    - Whisper variants (`tiny`, `small`, `large-v3`) run on CPU or GPU. `large-v3` is the default and recommended; `small` is the CPU-friendly fallback; `tiny` is fastest with lower quality.
-   - Qwen2-Audio 7B (fp16, ~16 GB VRAM) and Qwen2-Audio 7B (4-bit) (NF4 via bitsandbytes, ~9 GB VRAM) run only on GPU and are marked `(GPU required — N GB VRAM)`. The 4-bit variant is disabled with `(bitsandbytes not installed)` if the quantization library is missing.
-3. Pick a **Language** — `Auto-detect` works well for Whisper; for Qwen, selecting an explicit language helps the prompt.
-4. Choose output formats — `.txt` is always produced; `.lrc` and `.srt` are optional. Qwen uses segment-level timing rather than word-level.
+   - Qwen3-ASR 1.7B (~7 GB VRAM) and Qwen3-ASR 0.6B (~3 GB VRAM) run only on GPU and are marked `(GPU required — N GB VRAM)`. The 1.7B variant is the recommended Qwen choice for music; 0.6B trades some quality for speed.
+3. Pick a **Language** — `Auto-detect` works well for Whisper; for Qwen3-ASR, selecting an explicit language pins the model to that language and forces text-only output.
+4. Choose output formats — `.txt` is always produced; `.lrc` and `.srt` are optional. Qwen3-ASR returns the full transcript as a single segment without per-word timestamps.
 5. Click **Transcribe**. Outputs are saved under `~/.local/share/stemforge/output/lyrics/<user>/`.
 
 Click **Send to Compose** on the result card to import the lyrics into the Compose tab's "My Lyrics" textarea (you'll be asked before any existing text is replaced).
