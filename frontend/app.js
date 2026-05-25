@@ -31,6 +31,7 @@ export const appState = {
   voicePaths: {},
   enhancePaths: {},
   lyricsPaths: {},
+  lyricsEngineId: null,    // remembered Lyrics-mode engine selection (per session)
 };
 
 // ─── API Helpers ────────────────────────────────────────────────────────

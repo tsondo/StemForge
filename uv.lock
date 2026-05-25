@@ -346,6 +346,20 @@ wheels = [
 ]
 
 [[package]]
+name = "bitsandbytes"
+version = "0.49.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy", marker = "sys_platform == 'linux'" },
+    { name = "packaging", marker = "sys_platform == 'linux'" },
+    { name = "torch", marker = "sys_platform == 'linux'" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/29/71/acff7af06c818664aa87ff73e17a52c7788ad746b72aea09d3cb8e424348/bitsandbytes-0.49.2-py3-none-manylinux_2_24_aarch64.whl", hash = "sha256:2fc0830c5f7169be36e60e11f2be067c8f812dfcb829801a8703735842450750", size = 31442815, upload-time = "2026-02-16T21:26:06.783Z" },
+    { url = "https://files.pythonhosted.org/packages/19/57/3443d6f183436fbdaf5000aac332c4d5ddb056665d459244a5608e98ae92/bitsandbytes-0.49.2-py3-none-manylinux_2_24_x86_64.whl", hash = "sha256:54b771f06e1a3c73af5c7f16ccf0fc23a846052813d4b008d10cb6e017dd1c8c", size = 60651714, upload-time = "2026-02-16T21:26:11.579Z" },
+]
+
+[[package]]
 name = "brotli"
 version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2476,6 +2490,7 @@ dependencies = [
     { name = "ace-step", marker = "sys_platform == 'linux'" },
     { name = "ai-edge-litert", marker = "sys_platform == 'linux'" },
     { name = "audio-separator", marker = "sys_platform == 'linux'" },
+    { name = "bitsandbytes", marker = "sys_platform == 'linux'" },
     { name = "bs-roformer", marker = "sys_platform == 'linux'" },
     { name = "demucs", marker = "sys_platform == 'linux'" },
     { name = "diffq", marker = "sys_platform == 'linux'" },
@@ -2546,6 +2561,7 @@ requires-dist = [
     { name = "ace-step", editable = "Ace-Step-Wrangler/vendor/ACE-Step-1.5" },
     { name = "ai-edge-litert", specifier = ">=1.1.0" },
     { name = "audio-separator", directory = "vendor/python-audio-separator" },
+    { name = "bitsandbytes", specifier = ">=0.43.0" },
     { name = "bs-roformer", specifier = ">=0.3.2" },
     { name = "demucs", git = "https://github.com/facebookresearch/demucs.git?rev=v4.0.1" },
     { name = "diffq", specifier = "==0.2.4" },
@@ -2767,8 +2783,8 @@ dependencies = [
     { name = "typing-extensions", marker = "sys_platform == 'linux'" },
 ]
 wheels = [
-    { url = "https://download.pytorch.org/whl/cu130/torch-2.10.0%2Bcu130-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:ea3239d544b2e569a8f47db5c7fa4fd42a2fe96aefb84bb1eda45ce213020fd2" },
-    { url = "https://download.pytorch.org/whl/cu130/torch-2.10.0%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:22cfa45e73f1e8c64f4012737987a727d01d152121b93d196b0ca22f39a3f8e3" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torch-2.10.0%2Bcu130-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:ea3239d544b2e569a8f47db5c7fa4fd42a2fe96aefb84bb1eda45ce213020fd2", upload-time = "2026-01-21T19:01:56Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torch-2.10.0%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:22cfa45e73f1e8c64f4012737987a727d01d152121b93d196b0ca22f39a3f8e3", upload-time = "2026-01-21T19:02:52Z" },
 ]
 
 [[package]]
@@ -2801,8 +2817,8 @@ dependencies = [
     { name = "torch", marker = "sys_platform == 'linux'" },
 ]
 wheels = [
-    { url = "https://download-r2.pytorch.org/whl/cu130/torchaudio-2.10.0%2Bcu130-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:ac6f839eb97ce03cc8de795a9c193102db1501b3a5598a4cb9dd19d63481e7b0" },
-    { url = "https://download-r2.pytorch.org/whl/cu130/torchaudio-2.10.0%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:265420e015e8a181f5fe32931845ef7f6ef53f4625920b548737a41c80376147" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torchaudio-2.10.0%2Bcu130-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:ac6f839eb97ce03cc8de795a9c193102db1501b3a5598a4cb9dd19d63481e7b0", upload-time = "2026-01-21T15:05:51Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torchaudio-2.10.0%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:265420e015e8a181f5fe32931845ef7f6ef53f4625920b548737a41c80376147", upload-time = "2026-01-21T15:05:51Z" },
 ]
 
 [[package]]
@@ -2900,8 +2916,8 @@ dependencies = [
     { name = "torch", marker = "sys_platform == 'linux'" },
 ]
 wheels = [
-    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.25.0%2Bcu130-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:6e2da988706ac6557c8e07f24503320187412e6e564e26a6c9e7e58e3e494d82" },
-    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.25.0%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:67ff8c6d59d609d5310fcb477f65517d6c4b40d716257994005ceefbd3e804f2" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.25.0%2Bcu130-cp311-cp311-manylinux_2_28_aarch64.whl", hash = "sha256:6e2da988706ac6557c8e07f24503320187412e6e564e26a6c9e7e58e3e494d82", upload-time = "2026-01-21T22:34:41Z" },
+    { url = "https://download-r2.pytorch.org/whl/cu130/torchvision-0.25.0%2Bcu130-cp311-cp311-manylinux_2_28_x86_64.whl", hash = "sha256:67ff8c6d59d609d5310fcb477f65517d6c4b40d716257994005ceefbd3e804f2", upload-time = "2026-01-21T22:34:41Z" },
 ]
 
 [[package]]

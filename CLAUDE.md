@@ -329,7 +329,7 @@ Frozen `ModelSpec` subclasses describe every model variant. Spec types:
 | `DemucsSpec` | htdemucs, htdemucs_ft, mdx_extra, mdx_extra_q | `DemucsPipeline` |
 | `RoformerSpec` | roformer-viperx-vocals, roformer-kj-vocals, roformer-zfturbo-4stem, roformer-jarredou-6stem, + 2 more | `RoformerPipeline` |
 | `BasicPitchSpec` | basicpitch | `BasicPitchPipeline` |
-| `WhisperSpec` | whisper-tiny, whisper-base, whisper-small, whisper-medium | `VocalMidiPipeline` |
+| `WhisperSpec` | whisper-tiny, whisper-small, whisper-large-v3 | `VocalMidiPipeline`, `TranscribePipeline` |
 | `StableAudioSpec` | stable-audio-open-1.0 | `MusicGenPipeline` |
 
 Public API: `get_spec()`, `list_specs()`, `get_loader_kwargs()`, `get_pipeline_defaults()`, `get_gui_metadata()`.

@@ -127,7 +127,11 @@ export function initMidi() {
   );
 
   const lyricsEngineLabel = el('label', { className: 'field-label' }, 'Engine');
-  const lyricsEngineSelect = el('select', { id: 'lyrics-engine', className: 'select' });
+  const lyricsEngineSelect = el('select', {
+    id: 'lyrics-engine',
+    className: 'select',
+    title: 'Whisper is the standard speech recognition engine — fast, supports word-level timestamps, runs on CPU or GPU. Qwen2-Audio is a multimodal language model — slower, more accurate on sung or unusual vocals, no word timestamps, GPU only. The 4-bit Qwen variant fits in ~9 GB VRAM with minor quality loss.',
+  });
   const lyricsEngineGroup = el('div', { className: 'form-group' },
     lyricsEngineLabel, lyricsEngineSelect,
   );
@@ -1071,6 +1075,34 @@ function switchMidiMode(mode) {
   if (mode === 'lyrics') refreshLyricsSources();
 }
 
+function annotateEngineOption(engine, model) {
+  const label = model.display_name;
+
+  // Whisper variants — fixed per-model suffixes.
+  if (engine.engine_id === 'whisper') {
+    if (model.model_id === 'whisper-large-v3') return `${label} (recommended — GPU)`;
+    if (model.model_id === 'whisper-small')    return `${label} (CPU-friendly)`;
+    if (model.model_id === 'whisper-tiny')     return `${label} (fastest, lower quality)`;
+    return label;
+  }
+
+  // Qwen variants — show VRAM and mark unavailable cases explicitly.
+  if (engine.engine_id === 'qwen') {
+    const vram = model.approx_vram_gb ? `~${model.approx_vram_gb} GB VRAM` : 'GPU only';
+    const modelAvail = (typeof model.available === 'boolean') ? model.available : engine.available;
+    if (!modelAvail) {
+      // Distinguish bitsandbytes missing (CUDA up but NF4 unsupported) from no-CUDA.
+      if (engine.available) {
+        return `${label} (GPU required — ${vram}, bitsandbytes not installed)`;
+      }
+      return `${label} (GPU required — ${vram}, unavailable)`;
+    }
+    return `${label} (GPU required — ${vram})`;
+  }
+
+  return label;
+}
+
 async function loadLyricsEngines() {
   const sel = document.getElementById('lyrics-engine');
   try {
@@ -1079,18 +1111,38 @@ async function loadLyricsEngines() {
     clearChildren(sel);
     for (const e of _lyricsEngines) {
       for (const m of e.models) {
-        const suffix = e.available ? '' : ' (GPU required)';
-        const opt = el('option', { value: JSON.stringify({ engine_id: e.engine_id, model_id: m.model_id }) },
-          `${m.display_name}${suffix}`);
-        if (!e.available) opt.disabled = true;
+        const modelAvail = (typeof m.available === 'boolean') ? m.available : e.available;
+        const opt = el(
+          'option',
+          { value: JSON.stringify({ engine_id: e.engine_id, model_id: m.model_id }) },
+          annotateEngineOption(e, m),
+        );
+        if (!modelAvail) opt.disabled = true;
         sel.appendChild(opt);
       }
     }
-    // Default to whisper-base if present
-    const defaultOpt = Array.from(sel.options).find(o => {
-      try { return JSON.parse(o.value).model_id === 'whisper-base'; } catch { return false; }
-    });
-    if (defaultOpt) sel.value = defaultOpt.value;
+    // Default selection priority:
+    //   1. user's previous choice from this session (appState.lyricsEngineId)
+    //   2. whisper-large-v3 (the spec-mandated default)
+    //   3. first enabled option
+    const remembered = appState.lyricsEngineId;
+    let chosen = null;
+    if (remembered) {
+      chosen = Array.from(sel.options).find(o => {
+        if (o.disabled) return false;
+        try { return JSON.parse(o.value).model_id === remembered; } catch { return false; }
+      });
+    }
+    if (!chosen) {
+      chosen = Array.from(sel.options).find(o => {
+        if (o.disabled) return false;
+        try { return JSON.parse(o.value).model_id === 'whisper-large-v3'; } catch { return false; }
+      });
+    }
+    if (!chosen) {
+      chosen = Array.from(sel.options).find(o => !o.disabled);
+    }
+    if (chosen) sel.value = chosen.value;
     onLyricsEngineChange();
   } catch (err) {
     // Engine list failed to load — show a disabled placeholder option and
@@ -1122,6 +1174,8 @@ function onLyricsEngineChange() {
   if (condRow) {
     condRow.style.display = (parsed.engine_id === 'whisper') ? '' : 'none';
   }
+  // Remember the user's choice across mode/tab switches within this session.
+  appState.lyricsEngineId = parsed.model_id;
 }
 
 function refreshLyricsSources() {

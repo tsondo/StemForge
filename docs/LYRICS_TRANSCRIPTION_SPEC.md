@@ -998,3 +998,14 @@ Qwen is intentionally **not** smoke-tested in CI — it requires GPU, is large t
 11. Both Advanced toggles render in the MIDI tab's Lyrics mode and round-trip correctly (off-by-default for conditioning, on-by-default for collapse).
 12. `tests/test_transcribe.py::test_collapse_repetitions` passes.
 13. Re-running the test track shows no spurious `¡Oh, oh, oh!` tail.
+
+*(Addendum 2 — Registry pruning + Qwen NF4 variant)*
+
+14. `models/registry.py` contains exactly three Whisper specs: `WHISPER_TINY`, `WHISPER_SMALL`, `WHISPER_LARGE_V3`. `DEFAULT_WHISPER_SPEC` points to `WHISPER_LARGE_V3`.
+15. `grep -rn "whisper-base\|whisper-medium" --include='*.py' --include='*.js' --include='*.md'` returns no functional references (only changelog / historical mentions, if any).
+16. `pyproject.toml` lists `bitsandbytes>=0.43.0`. `uv.lock` is refreshed.
+17. `pipelines/transcribe_engines/qwen_engine.py` accepts a `model_id` constructor arg and supports both `qwen2-audio-7b-instruct` (fp16) and `qwen2-audio-7b-instruct-nf4` (NF4).
+18. `/api/transcribe/engines` returns five model entries total: 3 Whisper + 2 Qwen, each with `available` and (for Qwen) `approx_vram_gb` fields.
+19. MIDI Lyrics dropdown shows exactly five annotated entries matching §3.1.
+20. `ACKNOWLEDGMENTS.md` contains the new bitsandbytes entry.
+21. Manual checklist (§5.3 of Addendum 2) passes on Tsondo's laptop, specifically the Qwen 4-bit transcription run.

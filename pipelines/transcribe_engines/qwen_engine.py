@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import pathlib
-from typing import Any
+from typing import Any, Literal
 
 import torch
 
@@ -29,22 +29,44 @@ _PROMPT = (
     "explanations, or section labels."
 )
 
+Quantization = Literal["none", "nf4"]
+
+# Variant metadata for the /api/transcribe/engines endpoint and the
+# QwenEngine constructor.  Both variants share weights + chat template;
+# they differ only in the from_pretrained quantization kwargs.
+QWEN_VARIANTS: dict[str, dict] = {
+    "qwen2-audio-7b-instruct": {
+        "display_name": "Qwen2-Audio 7B",
+        "quantization": "none",
+        "approx_vram_gb": 16,
+    },
+    "qwen2-audio-7b-instruct-nf4": {
+        "display_name": "Qwen2-Audio 7B (4-bit)",
+        "quantization": "nf4",
+        "approx_vram_gb": 9,
+    },
+}
+
 
 class QwenEngine:
     engine_id = "qwen"
-    model_id = "qwen2-audio-7b-instruct"
     supports_word_timestamps = False
     requires_gpu = True
 
     def __init__(
         self,
-        model_id: str | None = None,
+        model_id: str = "qwen2-audio-7b-instruct",
         *,
         device: str = "cuda",
     ) -> None:
-        # model_id kwarg accepted for Protocol uniformity; ignored — Qwen
-        # has exactly one variant in v1.  device may be "cuda" (default)
-        # or "cuda:N" for multi-GPU scheduling.
+        if model_id not in QWEN_VARIANTS:
+            raise ValueError(
+                f"Unknown qwen model_id {model_id!r}. "
+                f"Available: {sorted(QWEN_VARIANTS)}"
+            )
+        self.model_id = model_id
+        self._variant = QWEN_VARIANTS[model_id]
+        self._quantization: Quantization = self._variant["quantization"]
         self._device = device
         self._model: Any | None = None
         self._processor: Any | None = None
@@ -70,23 +92,46 @@ class QwenEngine:
             ) from exc
 
         cache_dir = str(get_model_cache_dir("qwen2-audio"))
-        log.info("Loading %s on CUDA…", _QWEN_REPO)
+        log.info(
+            "Loading %s on CUDA (quantization=%s)…",
+            _QWEN_REPO, self._quantization,
+        )
         try:
             self._processor = AutoProcessor.from_pretrained(
                 _QWEN_REPO, cache_dir=cache_dir,
             )
+            from_pretrained_kwargs: dict = {
+                "cache_dir": cache_dir,
+                "device_map": self._device,
+            }
+            if self._quantization == "nf4":
+                try:
+                    from transformers import BitsAndBytesConfig
+                except ImportError as exc:
+                    raise ModelLoadError(
+                        "BitsAndBytesConfig unavailable — install bitsandbytes.",
+                        model_name=self.model_id,
+                    ) from exc
+                bnb_config = BitsAndBytesConfig(
+                    load_in_4bit=True,
+                    bnb_4bit_compute_dtype=torch.float16,
+                    bnb_4bit_quant_type="nf4",
+                    bnb_4bit_use_double_quant=True,
+                )
+                from_pretrained_kwargs["quantization_config"] = bnb_config
+                # device_map handled by bitsandbytes; do not pass torch_dtype.
+            else:
+                from_pretrained_kwargs["torch_dtype"] = torch.float16
+
             self._model = Qwen2AudioForConditionalGeneration.from_pretrained(
-                _QWEN_REPO,
-                cache_dir=cache_dir,
-                torch_dtype=torch.float16,
-                device_map=self._device,
+                _QWEN_REPO, **from_pretrained_kwargs,
             )
         except Exception as exc:
             raise ModelLoadError(
-                f"Failed to load Qwen2-Audio: {exc}",
+                f"Failed to load Qwen2-Audio ({self._quantization}): {exc}",
                 model_name=self.model_id,
             ) from exc
-        log.info("Qwen2-Audio ready.")
+        log.info("Qwen2-Audio ready (model_id=%s).", self.model_id)
 
     def transcribe(
         self,

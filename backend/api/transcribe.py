@@ -20,7 +20,7 @@ router = APIRouter(prefix="/api/transcribe", tags=["transcribe"])
 class TranscribeRequest(BaseModel):
     audio_path: str
     engine_id: str = "whisper"
-    model_id: str = "whisper-base"
+    model_id: str = "whisper-large-v3"
     language: str | None = None
     prompt: str | None = None
     formats: list[str] = ["txt", "lrc", "srt"]
@@ -48,10 +48,30 @@ def list_engines() -> dict:
                 for s in list_specs(WhisperSpec)
             ]
         elif engine_id == "qwen":
-            info["models"] = [
-                {"model_id": "qwen2-audio-7b-instruct",
-                 "display_name": "Qwen2-Audio 7B Instruct"},
-            ]
+            from pipelines.transcribe_engines.qwen_engine import QWEN_VARIANTS
+
+            # NF4 needs both bitsandbytes and transformers' BitsAndBytesConfig.
+            # If either import fails the 4-bit variant is reported as unavailable
+            # so the frontend can grey it out with a clear reason.
+            bnb_available = True
+            try:
+                from transformers import BitsAndBytesConfig  # noqa: F401
+                import bitsandbytes  # noqa: F401
+            except ImportError:
+                bnb_available = False
+
+            qwen_models = []
+            for mid, v in QWEN_VARIANTS.items():
+                model_available = cuda
+                if v["quantization"] == "nf4" and not bnb_available:
+                    model_available = False
+                qwen_models.append({
+                    "model_id": mid,
+                    "display_name": v["display_name"],
+                    "approx_vram_gb": v["approx_vram_gb"],
+                    "available": model_available,
+                })
+            info["models"] = qwen_models
         engines.append(info)
     return {"engines": engines, "cuda_available": cuda}
 

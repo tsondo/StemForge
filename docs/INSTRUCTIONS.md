@@ -136,7 +136,9 @@ The MIDI tab has two sub-modes selected with the `Notes | Lyrics` bar at the top
 In Lyrics mode:
 
 1. Pick a **Source** — a separated stem (vocal recommended), an enhanced stem, or the originally uploaded full mix.
-2. Pick an **Engine** — Whisper variants (`tiny`, `base`, `small`, `medium`, `large-v3`) run on CPU or GPU; Qwen2-Audio-7B-Instruct runs only on GPU and is marked `(GPU required)` when CUDA is unavailable.
+2. Pick an **Engine** — five options total:
+   - Whisper variants (`tiny`, `small`, `large-v3`) run on CPU or GPU. `large-v3` is the default and recommended; `small` is the CPU-friendly fallback; `tiny` is fastest with lower quality.
+   - Qwen2-Audio 7B (fp16, ~16 GB VRAM) and Qwen2-Audio 7B (4-bit) (NF4 via bitsandbytes, ~9 GB VRAM) run only on GPU and are marked `(GPU required — N GB VRAM)`. The 4-bit variant is disabled with `(bitsandbytes not installed)` if the quantization library is missing.
 3. Pick a **Language** — `Auto-detect` works well for Whisper; for Qwen, selecting an explicit language helps the prompt.
 4. Choose output formats — `.txt` is always produced; `.lrc` and `.srt` are optional. Qwen uses segment-level timing rather than word-level.
 5. Click **Transcribe**. Outputs are saved under `~/.local/share/stemforge/output/lyrics/<user>/`.

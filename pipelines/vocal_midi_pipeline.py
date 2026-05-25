@@ -20,7 +20,7 @@ Typical usage
     pipeline = VocalMidiPipeline()
     pipeline.configure(VocalMidiConfig(
         json_path=pathlib.Path("take_01.json"),
-        whisper_model_size="base",
+        whisper_model_size="small",
     ))
     pipeline.load_model()
     result = pipeline.run(pathlib.Path("take_01.wav"))
@@ -140,9 +140,9 @@ class VocalMidiConfig:
         file is written alongside the input audio with the same stem and a
         ``".mid"`` suffix.
     whisper_model_size:
-        faster-whisper model size identifier (e.g. ``"tiny"``, ``"base"``,
-        ``"small"``, ``"medium"``).  Larger models are more accurate at the
-        cost of load time and memory.  Default: ``"base"``.
+        faster-whisper model size identifier (e.g. ``"tiny"``, ``"small"``,
+        or ``"large-v3"``).  Larger models are more accurate at the
+        cost of load time and memory.  Default: ``"small"``.
     whisper_device:
         DEPRECATED.  Kept for backward compatibility; ignored.  The shared
         :class:`~pipelines.transcribe_engines.WhisperEngine` selects the
@@ -188,7 +188,7 @@ class VocalMidiConfig:
         self,
         json_path: pathlib.Path | None = None,
         output_path: pathlib.Path | None = None,
-        whisper_model_size: str = "base",
+        whisper_model_size: str = "small",
         whisper_device: str = "cpu",
         whisper_compute_type: str = "int8",
         demucs_model: str = "htdemucs",

@@ -42,7 +42,7 @@ class ModelSpec:
     Parameters
     ----------
     model_id:
-        Canonical registry key, e.g. ``"htdemucs"`` or ``"whisper-base"``.
+        Canonical registry key, e.g. ``"htdemucs"`` or ``"whisper-small"``.
     display_name:
         Human-readable label shown in GUI combos and tooltips.
     version:
@@ -483,36 +483,6 @@ WHISPER_TINY = _register(WhisperSpec(
     vad_filter=True,
 ))
 
-WHISPER_BASE = _register(WhisperSpec(
-    model_id="whisper-base",
-    display_name="Whisper base",
-    version="1.1.0",
-    source="openai/whisper-base",
-    device="cpu",
-    gpu_capable=False,
-    device_fallback="cpu",
-    device_quirks="",
-    sample_rate=16_000,
-    hop_size=0,
-    chunk_size=0,
-    max_duration_seconds=0.0,
-    default_bpm=0.0,
-    default_key="",
-    default_time_signature="",
-    quantize_grid="none",
-    default_min_note_ms=0.0,
-    capabilities=_WHISPER_CAPS,
-    cache_subdir="whisper",
-    description="Default vocal transcription — good speed/accuracy balance.",
-    preprocessing="Mono 16 kHz; VAD pre-filter.",
-    postprocessing="Word-level timestamps; PYIN pitch estimation per word.",
-    model_size="base",
-    compute_type="int8",
-    default_language=None,
-    word_timestamps=True,
-    vad_filter=True,
-))
-
 WHISPER_SMALL = _register(WhisperSpec(
     model_id="whisper-small",
     display_name="Whisper small",
@@ -537,36 +507,6 @@ WHISPER_SMALL = _register(WhisperSpec(
     preprocessing="Mono 16 kHz; VAD pre-filter.",
     postprocessing="Word-level timestamps; PYIN pitch estimation per word.",
     model_size="small",
-    compute_type="int8",
-    default_language=None,
-    word_timestamps=True,
-    vad_filter=True,
-))
-
-WHISPER_MEDIUM = _register(WhisperSpec(
-    model_id="whisper-medium",
-    display_name="Whisper medium",
-    version="1.1.0",
-    source="openai/whisper-medium",
-    device="cpu",
-    gpu_capable=False,
-    device_fallback="cpu",
-    device_quirks="",
-    sample_rate=16_000,
-    hop_size=0,
-    chunk_size=0,
-    max_duration_seconds=0.0,
-    default_bpm=0.0,
-    default_key="",
-    default_time_signature="",
-    quantize_grid="none",
-    default_min_note_ms=0.0,
-    capabilities=_WHISPER_CAPS,
-    cache_subdir="whisper",
-    description="Whisper medium — highest accuracy, slowest.",
-    preprocessing="Mono 16 kHz; VAD pre-filter.",
-    postprocessing="Word-level timestamps; PYIN pitch estimation per word.",
-    model_size="medium",
     compute_type="int8",
     default_language=None,
     word_timestamps=True,
@@ -777,7 +717,7 @@ ROFORMER_JARREDOU_6STEM = _register(RoformerSpec(
 # ---------------------------------------------------------------------------
 
 #: Default Whisper spec used by MidiModelLoader for vocal transcription.
-DEFAULT_WHISPER_SPEC: WhisperSpec = WHISPER_BASE
+DEFAULT_WHISPER_SPEC: WhisperSpec = WHISPER_LARGE_V3
 
 #: Default Demucs spec used as the application default model.
 DEFAULT_DEMUCS_SPEC: DemucsSpec = DEMUCS_HTDEMUCS

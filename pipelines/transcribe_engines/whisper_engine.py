@@ -31,7 +31,7 @@ class WhisperEngine:
 
     def __init__(
         self,
-        model_id: str = "whisper-base",
+        model_id: str = "whisper-small",
         *,
         condition_on_previous_text: bool = False,
     ) -> None:

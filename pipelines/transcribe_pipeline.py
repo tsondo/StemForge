@@ -28,7 +28,7 @@ _SUPPORTED_EXTS = frozenset({".wav", ".flac", ".mp3", ".ogg", ".aiff", ".aif", "
 @dataclass(slots=True)
 class TranscribeConfig:
     engine_id: str = "whisper"
-    model_id: str = "whisper-base"
+    model_id: str = "whisper-large-v3"
     language: str | None = None
     prompt: str | None = None
     output_dir: pathlib.Path | None = None
@@ -82,13 +82,11 @@ class TranscribePipeline:
         if self._config.engine_id == "whisper":
             # Pass conditioning flag through; Qwen has no equivalent.
             kwargs["condition_on_previous_text"] = self._config.condition_on_previous_text
-        elif (
-            self._config.engine_id == "qwen"
-            and self._config.gpu_index is not None
-        ):
-            # Only Qwen accepts a device kwarg today; Whisper reads its device
-            # from the model spec.  Forward gpu_index only when relevant.
-            kwargs["device"] = f"cuda:{self._config.gpu_index}"
+        elif self._config.engine_id == "qwen":
+            # Forward gpu_index only when set so the WhisperEngine signature
+            # is unaffected.  Qwen's load() uses device_map=device.
+            if self._config.gpu_index is not None:
+                kwargs["device"] = f"cuda:{self._config.gpu_index}"
         self._engine = engine_cls(**kwargs)
         self._engine.load()
 

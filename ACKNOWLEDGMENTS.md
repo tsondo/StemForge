@@ -184,6 +184,17 @@ Tokenizer and model infrastructure used by the generation pipelines.
 
 ---
 
+## bitsandbytes — Tim Dettmers et al.
+
+4-bit and 8-bit quantization library used to load Qwen2-Audio at reduced
+VRAM for the optional 4-bit lyrics transcription mode.
+
+- **Repository:** https://github.com/bitsandbytes-foundation/bitsandbytes
+- **Paper:** Dettmers et al. — *LLM.int8(): 8-bit Matrix Multiplication for Transformers at Scale* (NeurIPS 2022)
+- **License:** MIT
+
+---
+
 ## librosa
 
 Audio analysis and feature extraction used in the audio profiler and resampling utilities.

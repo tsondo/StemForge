@@ -284,10 +284,13 @@ class MidiModelLoader:
             range(len(f0)), sr=sr_pyin, hop_length=512
         )
 
-        # Transcribe via the shared WhisperEngine.
+        # Transcribe via the shared WhisperEngine.  The model is read from the
+        # registry's DEFAULT_WHISPER_SPEC so registry changes flow through here
+        # without code edits in this loader.
         from pipelines.transcribe_engines import WhisperEngine
+        from models.registry import DEFAULT_WHISPER_SPEC
 
-        engine = WhisperEngine(model_id="whisper-base")
+        engine = WhisperEngine(model_id=DEFAULT_WHISPER_SPEC.model_id)
         try:
             engine.load()
             transcription = engine.transcribe(path, language=language)
