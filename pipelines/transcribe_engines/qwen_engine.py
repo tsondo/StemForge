@@ -168,8 +168,13 @@ class QwenEngine:
         text = self._processor.apply_chat_template(
             conversation, add_generation_prompt=True, tokenize=False,
         )
+        # NOTE: Qwen2AudioProcessor.__call__ takes `audio=` (singular).  The
+        # old `audios=` kwarg (still mentioned in some HF docstrings) is
+        # silently dropped — the processor then returns only input_ids and
+        # the model responds with "no audio provided".  Sampling rate must
+        # match proc.feature_extractor.sampling_rate (16 kHz for Qwen2-Audio).
         inputs = self._processor(
-            text=text, audios=[audio], sampling_rate=16_000,
+            text=text, audio=audio, sampling_rate=16_000,
             return_tensors="pt", padding=True,
         ).to(self._model.device)
 
