@@ -211,10 +211,13 @@ class QwenEngine:
                     pipeline_name="transcribe",
                 ) from exc
             chunk_texts.append(text)
-            log.debug(
-                "Chunk %d/%d (%.1f-%.1fs): %d chars",
+            preview = text.replace("\n", " ⏎ ").strip()
+            if len(preview) > 80:
+                preview = preview[:80] + "…"
+            log.info(
+                "Qwen chunk %d/%d (%.1f-%.1fs): %d chars | %s",
                 chunk.index + 1, len(chunks),
-                chunk.start_s, chunk.end_s, len(text),
+                chunk.start_s, chunk.end_s, len(text), preview,
             )
 
         stitched = stitch_chunks(chunk_texts)

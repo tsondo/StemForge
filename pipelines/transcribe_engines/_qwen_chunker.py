@@ -288,9 +288,9 @@ def stitch_chunks(chunk_texts: list[str]) -> str:
             cut_next_at = head_start + length
             appended = list(next_tokens[cut_next_at:])
             out_tokens.extend(appended)
-            log.debug(
-                "Stitched chunk %d → %d: matched %d tokens (%r)",
-                i - 1, i, length,
+            log.info(
+                "Stitched chunk %d → %d: matched %d tokens of %d/%d tail/head (%r)",
+                i - 1, i, length, tail_len, head_len,
                 " ".join(tail[tail_start:tail_start + length]),
             )
         else:

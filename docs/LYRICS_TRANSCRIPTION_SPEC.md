@@ -1046,3 +1046,10 @@ Qwen is intentionally **not** smoke-tested in CI — it requires GPU, is large t
 44. All existing tests in `tests/test_transcribe.py` continue to pass.
 45. Manual hint test on Catrina stem with Qwen 4-bit shows verbatim Spanish lyrics (no "The lyrics translate to..." prefix) and uses the hint's spelling for proper nouns.
 46. Whisper engine code is byte-for-byte unchanged.
+
+*(Addendum 7 Phase 1 — Diagnostic logging for hint-induced truncation)*
+
+47. `qwen_engine.py` emits one INFO-level log line per chunk in the format `Qwen chunk N/M (X.X-Y.Ys): Z chars | <preview>` where preview is the first 80 chars of the raw model output with newlines rendered as `⏎`.
+48. `_qwen_chunker.py` emits one INFO-level log line per stitch decision, both for successful stitches (`Stitched chunk N → N+1: matched X tokens of A/B tail/head (...)`) and for fallback non-matches.
+49. No other behavior changes — re-running the Catrina stem produces the same truncated output as before, with the addition of the diagnostic log lines.
+50. Phase 2 of this addendum (the actual fix) is held pending review of the log output.
