@@ -29,7 +29,12 @@ class WhisperEngine:
     supports_word_timestamps = True
     requires_gpu = False  # works on CPU
 
-    def __init__(self, model_id: str = "whisper-base") -> None:
+    def __init__(
+        self,
+        model_id: str = "whisper-base",
+        *,
+        condition_on_previous_text: bool = False,
+    ) -> None:
         spec = get_spec(model_id)
         if not isinstance(spec, WhisperSpec):
             raise ModelLoadError(
@@ -37,6 +42,7 @@ class WhisperEngine:
             )
         self.model_id = model_id
         self._spec: WhisperSpec = spec
+        self._condition_on_previous_text = condition_on_previous_text
         self._model: Any | None = None
 
     def load(self) -> None:
@@ -110,6 +116,7 @@ class WhisperEngine:
                 vad_filter=True,
                 language=language,
                 initial_prompt=prompt,
+                condition_on_previous_text=self._condition_on_previous_text,
             )
             language_detected = str(info.language) if info.language else None
             for seg in segments_iter:

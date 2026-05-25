@@ -24,6 +24,9 @@ class TranscribeRequest(BaseModel):
     language: str | None = None
     prompt: str | None = None
     formats: list[str] = ["txt", "lrc", "srt"]
+    condition_on_previous_text: bool = False   # Whisper only; off = suppress hallucination loops
+    collapse_repetitions: bool = True          # collapse runs of duplicate segments
+    max_repetition_run: int = 4               # max identical consecutive segments before collapse
 
 
 @router.get("/engines")
@@ -76,6 +79,9 @@ def _run_transcribe(
             output_dir=out_dir,
             formats=tuple(req.formats),
             gpu_index=ctx.gpu_index,
+            condition_on_previous_text=req.condition_on_previous_text,
+            collapse_repetitions=req.collapse_repetitions,
+            max_repetition_run=req.max_repetition_run,
         )
         pipeline = pipeline_manager.get_transcribe(ctx.gpu_index)
         pipeline.configure(config)

@@ -174,9 +174,42 @@ export function initMidi() {
     'Load audio or run separation first. Lyrics transcription works best on an isolated vocal stem.',
   );
 
+  // ─── Advanced options ───
+  const lyricsCondRow = el('div', {
+    className: 'form-group',
+    id: 'lyrics-cond-row',
+    style: { display: 'none' },   // shown only for Whisper engines
+  },
+    el('label', { className: 'checkbox-label' },
+      el('input', { type: 'checkbox', id: 'lyrics-condition-on-previous' }),
+      ' Cross-window conditioning',
+    ),
+    el('div', { className: 'text-dim', style: { fontSize: '0.85em', marginTop: '2px' } },
+      "Whisper's default is on, but it commonly causes hallucinated repetition on instrumental passages. StemForge disables it by default for music.",
+    ),
+  );
+
+  const lyricsCollapseRow = el('div', { className: 'form-group' },
+    el('label', { className: 'checkbox-label' },
+      el('input', { type: 'checkbox', id: 'lyrics-collapse-reps', checked: 'true' }),
+      ' Collapse repeated lines (recommended for music)',
+    ),
+    el('div', { className: 'form-row', style: { marginTop: '4px', display: 'flex', alignItems: 'center', gap: '6px' } },
+      el('label', { style: { fontSize: '0.85em' } }, 'Max repetitions before collapse:'),
+      el('input', { type: 'number', id: 'lyrics-max-run', value: '4', min: '2', max: '20',
+                    style: { width: '60px' } }),
+    ),
+  );
+
+  const lyricsAdvanced = el('details', { className: 'lyrics-advanced' },
+    el('summary', {}, 'Advanced'),
+    lyricsCondRow,
+    lyricsCollapseRow,
+  );
+
   lyricsControls.append(
     lyricsSourceGroup, lyricsEngineGroup, lyricsLangGroup, lyricsFmtGroup,
-    lyricsCoarseNotice, lyricsTranscribeBtn, lyricsLoadHint,
+    lyricsCoarseNotice, lyricsAdvanced, lyricsTranscribeBtn, lyricsLoadHint,
   );
 
   // ─── Right: results ───
@@ -1081,6 +1114,11 @@ function onLyricsEngineChange() {
   } else {
     notice.classList.add('hidden');
   }
+  // Show conditioning toggle only for Whisper — it's a Whisper-specific parameter.
+  const condRow = document.getElementById('lyrics-cond-row');
+  if (condRow) {
+    condRow.style.display = (parsed.engine_id === 'whisper') ? '' : 'none';
+  }
 }
 
 function refreshLyricsSources() {
@@ -1150,6 +1188,13 @@ async function startLyricsTranscription() {
   clearChildren(resultContainer);
   transcribeBtn.disabled = true;
 
+  const condCheck = document.getElementById('lyrics-condition-on-previous');
+  const collapseCheck = document.getElementById('lyrics-collapse-reps');
+  const maxRunInput = document.getElementById('lyrics-max-run');
+  const conditionOnPrevious = condCheck ? condCheck.checked : false;
+  const collapseReps = collapseCheck ? collapseCheck.checked : true;
+  const maxRun = maxRunInput ? Math.max(2, Math.min(20, parseInt(maxRunInput.value, 10) || 4)) : 4;
+
   try {
     const { job_id } = await api('/transcribe', {
       method: 'POST',
@@ -1159,6 +1204,9 @@ async function startLyricsTranscription() {
         model_id: engineCfg.model_id,
         language: langSel.value || null,
         formats,
+        condition_on_previous_text: conditionOnPrevious,
+        collapse_repetitions: collapseReps,
+        max_repetition_run: maxRun,
       }),
     });
 

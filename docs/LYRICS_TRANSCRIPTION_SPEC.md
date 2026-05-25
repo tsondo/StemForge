@@ -990,3 +990,11 @@ Qwen is intentionally **not** smoke-tested in CI — it requires GPU, is large t
 6. No regressions on `tests/test_faster_whisper.py` or the MIDI tab's existing vocal → MIDI flow.
 7. `docs/CURRENT_STATE.md` is updated with one line under "What's working" describing the new Lyrics feature.
 8. `docs/INSTRUCTIONS.md` section 4 (MIDI) gets a new sub-section describing the Notes/Lyrics mode bar.
+
+*(Addendum 1 — Whisper hallucination mitigation)*
+
+9. `condition_on_previous_text=False` is the default in `WhisperEngine`, surfaced through `TranscribeConfig` and the API request schema.
+10. `_collapse_repetitions` helper exists, is wired into `TranscribePipeline.run()`, defaults to enabled with `max_run=4`.
+11. Both Advanced toggles render in the MIDI tab's Lyrics mode and round-trip correctly (off-by-default for conditioning, on-by-default for collapse).
+12. `tests/test_transcribe.py::test_collapse_repetitions` passes.
+13. Re-running the test track shows no spurious `¡Oh, oh, oh!` tail.

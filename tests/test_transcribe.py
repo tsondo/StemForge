@@ -47,5 +47,47 @@ def main() -> None:
         print("transcribe pipeline OK")
 
 
+def test_collapse_repetitions() -> None:
+    """Verify the repetition collapse helper without invoking a model."""
+    from pipelines.transcribe_pipeline import _collapse_repetitions
+    from pipelines.transcribe_engines import TranscriptionResult, TranscriptionSegment
+
+    # Build a synthetic result: 2 normal lines, then 10 identical "oh oh oh"
+    # segments, then 1 normal line.
+    segs = [
+        TranscriptionSegment(start=0.0, end=2.0, text="Verse line one", words=[]),
+        TranscriptionSegment(start=2.0, end=4.0, text="Verse line two", words=[]),
+    ]
+    for i in range(10):
+        segs.append(TranscriptionSegment(
+            start=4.0 + i * 0.5,
+            end=4.5 + i * 0.5,
+            text="¡Oh, oh, oh!",
+            words=[],
+        ))
+    segs.append(TranscriptionSegment(start=9.0, end=11.0, text="Final line", words=[]))
+
+    result = TranscriptionResult(
+        text="(unused)",
+        language="es",
+        segments=segs,
+        has_word_timestamps=False,
+        engine_id="whisper",
+        model_id="whisper-large-v3",
+    )
+
+    collapsed = _collapse_repetitions(result, max_run=4)
+
+    # Expect: 2 verse + 4 oh + 1 ellipsis + 1 final = 8 segments
+    assert len(collapsed.segments) == 8, f"got {len(collapsed.segments)} segments"
+    assert collapsed.segments[6].text == "[...]"
+    assert collapsed.segments[6].start == 6.0, (
+        f"expected ellipsis start=6.0, got {collapsed.segments[6].start}"
+    )  # 5th oh starts at 4.0 + 4*0.5
+    assert collapsed.segments[7].text == "Final line"
+    print("collapse_repetitions OK")
+
+
 if __name__ == "__main__":
     main()
+    test_collapse_repetitions()

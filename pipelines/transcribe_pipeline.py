@@ -16,6 +16,7 @@ from pipelines.transcribe_engines import (
     ENGINES,
     TranscriptionEngine,
     TranscriptionResult,
+    TranscriptionSegment,
 )
 from utils.errors import AudioProcessingError, InvalidInputError, PipelineExecutionError
 
@@ -34,6 +35,9 @@ class TranscribeConfig:
     formats: tuple[str, ...] = ("txt", "lrc", "srt")
     gpu_index: int | None = None     # multi-GPU scheduler hint; engines that
                                       # care (Qwen) bind to cuda:{gpu_index}.
+    condition_on_previous_text: bool = False  # Whisper only; ignored by other engines
+    collapse_repetitions: bool = True         # collapse runs of duplicate segments
+    max_repetition_run: int = 4              # max identical consecutive segments before collapse
 
 
 @dataclass(slots=True)
@@ -75,13 +79,15 @@ class TranscribePipeline:
             )
         engine_cls = ENGINES[self._config.engine_id]
         kwargs: dict = {"model_id": self._config.model_id}
-        # Only Qwen accepts a device kwarg today; Whisper reads its device
-        # from the model spec.  Forward gpu_index only when relevant so we
-        # don't break the WhisperEngine constructor signature.
-        if (
+        if self._config.engine_id == "whisper":
+            # Pass conditioning flag through; Qwen has no equivalent.
+            kwargs["condition_on_previous_text"] = self._config.condition_on_previous_text
+        elif (
             self._config.engine_id == "qwen"
             and self._config.gpu_index is not None
         ):
+            # Only Qwen accepts a device kwarg today; Whisper reads its device
+            # from the model spec.  Forward gpu_index only when relevant.
             kwargs["device"] = f"cuda:{self._config.gpu_index}"
         self._engine = engine_cls(**kwargs)
         self._engine.load()
@@ -114,6 +120,12 @@ class TranscribePipeline:
             language=self._config.language,
             prompt=self._config.prompt,
         )
+
+        if self._config.collapse_repetitions:
+            result = _collapse_repetitions(
+                result,
+                max_run=self._config.max_repetition_run,
+            )
 
         if progress_cb:
             progress_cb(0.85, "Writing outputs")
@@ -158,6 +170,77 @@ class TranscribePipeline:
         if self._engine is not None:
             self._engine.clear()
             self._engine = None
+
+
+# ── Repetition collapse ──────────────────────────────────────────────
+
+
+def _collapse_repetitions(
+    result: TranscriptionResult,
+    *,
+    max_run: int,
+) -> TranscriptionResult:
+    """Collapse consecutive runs of duplicate segments.
+
+    A "duplicate" is determined by case-folded, whitespace-stripped,
+    punctuation-stripped text equality.  Runs longer than `max_run` are
+    truncated to `max_run` segments and followed by a single ellipsis
+    segment whose text is "[...]" and whose time span covers the dropped
+    segments.
+
+    Word timings inside dropped segments are discarded — the ellipsis
+    segment has `words=[]`.  This is intentional: a hallucinated loop's
+    word timings are themselves unreliable.
+    """
+    if len(result.segments) <= max_run:
+        return result
+
+    def _norm(text: str) -> str:
+        stripped = text.strip().lower()
+        for ch in "¡!¿?.,;:":
+            stripped = stripped.replace(ch, "")
+        return " ".join(stripped.split())
+
+    out: list[TranscriptionSegment] = []
+    i = 0
+    segs = result.segments
+    while i < len(segs):
+        j = i
+        key = _norm(segs[i].text)
+        if not key:
+            # Empty segments represent legitimate pauses — leave in place.
+            out.append(segs[i])
+            i += 1
+            continue
+        while j < len(segs) and _norm(segs[j].text) == key:
+            j += 1
+        run_len = j - i
+        if run_len > max_run:
+            # Keep first max_run segments verbatim.
+            out.extend(segs[i : i + max_run])
+            # Append one ellipsis segment spanning the dropped tail.
+            dropped_start = segs[i + max_run].start
+            dropped_end = segs[j - 1].end
+            out.append(TranscriptionSegment(
+                start=dropped_start,
+                end=dropped_end,
+                text="[...]",
+                words=[],
+            ))
+        else:
+            out.extend(segs[i:j])
+        i = j
+
+    # Rebuild `text` from collapsed segments so .txt output reflects the collapse.
+    new_text = " ".join(s.text.strip() for s in out if s.text.strip())
+    return TranscriptionResult(
+        text=new_text,
+        language=result.language,
+        segments=out,
+        has_word_timestamps=result.has_word_timestamps,
+        engine_id=result.engine_id,
+        model_id=result.model_id,
+    )
 
 
 # ── Format helpers ───────────────────────────────────────────────────
