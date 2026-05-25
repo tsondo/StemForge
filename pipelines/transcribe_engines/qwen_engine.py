@@ -23,41 +23,94 @@ from .types import (
 log = logging.getLogger(__name__)
 
 _QWEN_REPO = "Qwen/Qwen2-Audio-7B-Instruct"
-_BASE_PROMPT = (
-    "Transcribe the lyrics of this audio. Output only the lyrics text, "
-    "preserving line breaks where the singer pauses. Do not add commentary, "
-    "explanations, or section labels."
-)
-_HINT_WRAPPER = (
-    " Names and key terms that may appear in the lyrics: {hint}. "
-    "Use these spellings exactly. Do not translate or summarize — "
-    "output only the verbatim transcribed lyrics."
+
+# Base task description used in turn 1. Stable across hint/no-hint cases.
+_TURN1_BASE = (
+    "I'll send you an audio clip in a moment. Your job is to transcribe "
+    "the sung lyrics verbatim. Do not translate, summarize, or comment — "
+    "output only the lyrics text, preserving line breaks where the singer "
+    "pauses."
 )
 
+# Hint guidance, appended to turn 1 only when a hint is present.
+# The final sentence is critical: it tells the model not to emit hint text
+# unless it actually appears in the audio. Without this, the model treats
+# the hint as content it must produce in every chunk (Phase 1 failure mode).
+_TURN1_HINT = (
+    "\n\nThe lyrics may contain these specific names and spellings: {hint}. "
+    "When you hear those words sung, use those exact spellings. Otherwise "
+    "ignore them — do not emit these names unless you actually hear them "
+    "in the audio."
+)
 
-def _build_qwen_prompt(hint: str | None, language: str | None) -> str:
-    """Construct Qwen's chat-template instruction text.
+# Fabricated assistant turn. Same for both hint and no-hint cases — the
+# constraint about only emitting heard text applies regardless.
+_TURN2_ACKNOWLEDGMENT = (
+    "Understood. I will transcribe the lyrics of the audio verbatim, "
+    "preserving line breaks. I will only emit text I actually hear sung."
+)
 
-    The hint, when present, is wrapped with explicit framing so the model
-    treats it as vocabulary guidance rather than as additional task
-    instruction. The wrapper re-asserts the original task immediately after
-    the hint to prevent the model from drifting into translation or
-    summarization when the hint contains text in a different language than
-    the surrounding instruction.
+# Turn 3 base instruction. Minimal by design — the audio attached to this
+# turn is the primary signal; the text is only here so the chat template
+# is well-formed.
+_TURN3_BASE = "Transcribe the lyrics."
 
-    A trailing language suffix is appended when language is set, mirroring
-    the existing behavior from the parent spec.
+
+def _sanitize_hint(hint: str | None) -> str:
+    """Normalize a user-supplied hint to a single line with no double-quotes.
+
+    Newlines and stray quotes inside the hint could disrupt the chat
+    template's parse of the surrounding instruction text.
     """
-    prompt = _BASE_PROMPT
-    hint_clean = (hint or "").strip()
+    if not hint:
+        return ""
+    cleaned = " ".join(hint.split()).replace('"', "'")
+    return cleaned
+
+
+def _build_qwen_conversation(
+    hint: str | None,
+    language: str | None,
+) -> list[dict]:
+    """Construct Qwen's chat-template conversation for one chunk.
+
+    Returns a three-turn structure that isolates hint context (turn 1) and
+    fabricated assistant acknowledgment (turn 2) from the audio-bearing
+    transcription request (turn 3). The audio placeholder is included in
+    turn 3 only — the actual audio array is supplied separately to the
+    processor at encoding time.
+
+    The structural separation is the load-bearing design choice. Inline
+    concatenation of hint into the same turn as the transcription request
+    caused the model to treat hint text as content to emit (see Phase 1
+    diagnostic for evidence). The fake-assistant-turn pattern is documented
+    in Addendum 6 §5 as the escalation path for that failure mode and is
+    implemented here.
+    """
+    hint_clean = _sanitize_hint(hint)
+
+    # Turn 1: setup, optionally with hint guidance.
+    turn1_text = _TURN1_BASE
     if hint_clean:
-        # Sanitize hint to a single line — newlines or stray quotes inside the
-        # user's input could affect the model's parse of the wrapper.
-        hint_clean = " ".join(hint_clean.split()).replace('"', "'")
-        prompt += _HINT_WRAPPER.format(hint=hint_clean)
+        turn1_text += _TURN1_HINT.format(hint=hint_clean)
+
+    # Turn 3: minimal transcription request, optionally with language hint.
+    turn3_text = _TURN3_BASE
     if language:
-        prompt += f" The lyrics are in {language}."
-    return prompt
+        turn3_text += f" The lyrics are in {language}."
+
+    return [
+        {"role": "user", "content": [
+            {"type": "text", "text": turn1_text},
+        ]},
+        {"role": "assistant", "content": [
+            {"type": "text", "text": _TURN2_ACKNOWLEDGMENT},
+        ]},
+        {"role": "user", "content": [
+            {"type": "audio", "audio_url": "in_memory"},
+            {"type": "text", "text": turn3_text},
+        ]},
+    ]
 
 
 Quantization = Literal["none", "nf4"]
@@ -245,13 +298,7 @@ class QwenEngine:
         prompt: str | None,
     ) -> str:
         """Run a single Qwen forward pass on one audio chunk."""
-        user_prompt = _build_qwen_prompt(hint=prompt, language=language)
-        conversation = [
-            {"role": "user", "content": [
-                {"type": "audio", "audio_url": "in_memory"},
-                {"type": "text", "text": user_prompt},
-            ]},
-        ]
+        conversation = _build_qwen_conversation(hint=prompt, language=language)
         text = self._processor.apply_chat_template(
             conversation, add_generation_prompt=True, tokenize=False,
         )

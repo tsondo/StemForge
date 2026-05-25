@@ -230,45 +230,70 @@ def test_qwen_stitcher_single_token_short_rejected() -> None:
     print("qwen_stitcher short-token-rejected OK")
 
 
-def test_qwen_prompt_construction() -> None:
-    """Verify the Qwen prompt assembler wraps hints correctly."""
+def test_qwen_conversation_construction() -> None:
+    """Verify the Qwen conversation builder produces the expected 3-turn structure."""
     from pipelines.transcribe_engines.qwen_engine import (
-        _build_qwen_prompt, _BASE_PROMPT,
+        _build_qwen_conversation,
+        _TURN1_BASE, _TURN2_ACKNOWLEDGMENT, _TURN3_BASE,
     )
 
-    # No hint, no language → bare base prompt.
-    assert _build_qwen_prompt(None, None) == _BASE_PROMPT
-    assert _build_qwen_prompt("", None) == _BASE_PROMPT
-    assert _build_qwen_prompt("   ", None) == _BASE_PROMPT
+    # No hint, no language → 3 turns, hint guidance absent, language suffix absent.
+    conv = _build_qwen_conversation(None, None)
+    assert len(conv) == 3
+    assert conv[0]["role"] == "user"
+    assert conv[1]["role"] == "assistant"
+    assert conv[2]["role"] == "user"
 
-    # Hint only → wrapper applied, anti-translation language present.
-    out = _build_qwen_prompt("Catrina, Feliz cumpleaños", None)
-    assert "Catrina, Feliz cumpleaños" in out
-    assert "Use these spellings exactly" in out
-    assert "Do not translate or summarize" in out
-    assert out.startswith(_BASE_PROMPT)
+    # Turn 1 contains base task only.
+    turn1_text = conv[0]["content"][0]["text"]
+    assert turn1_text == _TURN1_BASE
+    assert "names and spellings" not in turn1_text
 
-    # Language only, no hint → language suffix present, no wrapper.
-    out = _build_qwen_prompt(None, "Spanish")
-    assert "lyrics are in Spanish" in out
-    assert "Use these spellings exactly" not in out
+    # Turn 2 is the fabricated acknowledgment.
+    assert conv[1]["content"][0]["text"] == _TURN2_ACKNOWLEDGMENT
 
-    # Hint + language → both present, hint wrapper precedes language suffix.
-    out = _build_qwen_prompt("Catrina", "Spanish")
-    assert "Catrina" in out
-    assert "Use these spellings exactly" in out
-    assert "lyrics are in Spanish" in out
-    # Wrapper must come before the language suffix so the language hint
-    # doesn't get absorbed into the anti-translation clause.
-    assert out.index("Use these spellings exactly") < out.index("lyrics are in Spanish")
+    # Turn 3 has audio placeholder + minimal text.
+    assert conv[2]["content"][0]["type"] == "audio"
+    assert conv[2]["content"][1]["text"] == _TURN3_BASE
 
-    # Multi-line / quote-laden hint should be sanitized to one line.
-    out = _build_qwen_prompt('Line one\nLine "two"\nLine three', None)
-    assert "\n" not in out
-    assert '"' not in out
-    assert "Line one Line 'two' Line three" in out
+    # Empty-string and whitespace hints behave like None.
+    assert _build_qwen_conversation("", None) == conv
+    assert _build_qwen_conversation("   ", None) == conv
 
-    print("qwen_prompt_construction OK")
+    # Hint only → hint guidance in turn 1, turn 2/3 unchanged.
+    conv = _build_qwen_conversation("Catrina, Feliz cumpleaños", None)
+    turn1_text = conv[0]["content"][0]["text"]
+    assert turn1_text.startswith(_TURN1_BASE)
+    assert "Catrina, Feliz cumpleaños" in turn1_text
+    assert "do not emit these names unless you actually hear them" in turn1_text
+    # Turn 3 must NOT contain the hint — that was the Phase 1 failure mode.
+    assert "Catrina" not in conv[2]["content"][1]["text"]
+    # Turn 2 must not vary based on hint presence.
+    assert conv[1]["content"][0]["text"] == _TURN2_ACKNOWLEDGMENT
+
+    # Language only → turn 3 has language suffix, turn 1 unchanged.
+    conv = _build_qwen_conversation(None, "Spanish")
+    assert conv[0]["content"][0]["text"] == _TURN1_BASE
+    turn3_text = conv[2]["content"][1]["text"]
+    assert "in Spanish" in turn3_text
+
+    # Hint + language → hint in turn 1, language in turn 3, no crosstalk.
+    conv = _build_qwen_conversation("Catrina", "Spanish")
+    turn1_text = conv[0]["content"][0]["text"]
+    turn3_text = conv[2]["content"][1]["text"]
+    assert "Catrina" in turn1_text
+    assert "Catrina" not in turn3_text
+    assert "Spanish" in turn3_text
+    assert "Spanish" not in turn1_text
+
+    # Multi-line / quote-laden hint should be sanitized.
+    conv = _build_qwen_conversation('Line one\nLine "two"\nLine three', None)
+    turn1_text = conv[0]["content"][0]["text"]
+    assert "\n\nThe lyrics may contain" in turn1_text  # the join we added
+    # The hint itself, post-sanitization:
+    assert "Line one Line 'two' Line three" in turn1_text
+
+    print("qwen_conversation_construction OK")
 
 
 if __name__ == "__main__":
@@ -284,4 +309,4 @@ if __name__ == "__main__":
     test_qwen_stitcher_single_token_substantive()
     test_qwen_stitcher_single_token_stopword_rejected()
     test_qwen_stitcher_single_token_short_rejected()
-    test_qwen_prompt_construction()
+    test_qwen_conversation_construction()

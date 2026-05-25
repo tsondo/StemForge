@@ -1053,3 +1053,15 @@ Qwen is intentionally **not** smoke-tested in CI — it requires GPU, is large t
 48. `_qwen_chunker.py` emits one INFO-level log line per stitch decision, both for successful stitches (`Stitched chunk N → N+1: matched X tokens of A/B tail/head (...)`) and for fallback non-matches.
 49. No other behavior changes — re-running the Catrina stem produces the same truncated output as before, with the addition of the diagnostic log lines.
 50. Phase 2 of this addendum (the actual fix) is held pending review of the log output.
+
+*(Addendum 7 Phase 2 — Fake-assistant-turn structural separation)*
+
+51. `qwen_engine.py` exposes `_build_qwen_conversation(hint, language) -> list[dict]` returning a 3-turn user/assistant/user conversation structure.
+52. Audio placeholder appears in turn 3 only; hint text appears in turn 1 only; language hint appears in turn 3 only.
+53. `_TURN1_BASE`, `_TURN1_HINT`, `_TURN2_ACKNOWLEDGMENT`, `_TURN3_BASE` module constants are present.
+54. Addendum 6 artifacts (`_BASE_PROMPT`, `_HINT_WRAPPER`, `_build_qwen_prompt`) are removed.
+55. `_transcribe_chunk` consumes the new conversation list directly.
+56. `test_qwen_conversation_construction` passes; old `test_qwen_prompt_construction` removed.
+57. All other existing tests continue to pass.
+58. Whisper engine, stitcher, pipeline, API, frontend all unchanged.
+59. Re-running the Catrina diagnostic from Phase 1 shows per-chunk char counts substantially improved over the bimodal 26/196-char Phase 1 baseline.
