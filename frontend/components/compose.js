@@ -142,6 +142,8 @@ export function initCompose() {
 
   // Check AceStep health first
   checkHealth(panel);
+
+  appState.on('lyricsSendToCompose', handleLyricsFromTranscribe);
 }
 
 async function checkHealth(panel) {
@@ -4543,4 +4545,49 @@ async function sendToSeparate(audioPath) {
     const hint = _id('compose-hint');
     if (hint) hint.textContent = `Send failed: ${err.message}`;
   }
+}
+
+// ─── Lyrics import from MIDI/Lyrics tab ─────────────────────────────
+
+function handleLyricsFromTranscribe(result) {
+  // Find the My Lyrics textarea (id="compose-lyrics-text") and ask the
+  // user before overwriting any typed content.
+  const ta = document.getElementById('compose-lyrics-text');
+  if (!ta) return;
+
+  // Switch to the My Lyrics tab if it isn't already active
+  const tabBtn = document.querySelector('.compose-create-tab[data-tab="my-lyrics"]');
+  if (tabBtn && !tabBtn.classList.contains('active')) tabBtn.click();
+
+  // Remove any prior banner
+  const prior = document.getElementById('compose-lyrics-import-banner');
+  if (prior) prior.remove();
+
+  const text = (result && result.text) || '';
+  if (!text.trim()) return;
+
+  const banner = el('div', {
+    id: 'compose-lyrics-import-banner',
+    className: 'banner',
+    style: { display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' },
+  });
+  banner.appendChild(el('span', { style: { flex: '1' } },
+    `Transcribed lyrics ready (${result.engine_id || 'unknown'}, ${result.segment_count || 0} segments).`));
+  const applyBtn = el('button', {
+    className: 'btn btn-sm btn-primary',
+    onClick: () => {
+      const isEmpty = !ta.value.trim();
+      if (!isEmpty && !confirm('Replace existing lyrics? Cancel to keep current text.')) return;
+      ta.value = text;
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      banner.remove();
+    },
+  }, 'Apply');
+  const dismissBtn = el('button', {
+    className: 'btn btn-sm',
+    onClick: () => banner.remove(),
+  }, 'Dismiss');
+  banner.append(applyBtn, dismissBtn);
+
+  ta.parentElement?.insertBefore(banner, ta);
 }
