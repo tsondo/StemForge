@@ -72,6 +72,20 @@ def list_engines() -> dict:
                     "available": model_available,
                 })
             info["models"] = qwen_models
+        elif engine_id == "qwen3-asr":
+            from pipelines.transcribe_engines.qwen3_asr_engine import (
+                QWEN3_ASR_VARIANTS,
+            )
+            info["models"] = [
+                {
+                    "model_id": mid,
+                    "display_name": v["display_name"],
+                    "approx_vram_gb": v["approx_vram_gb"],
+                    "description": v["description"],
+                    "available": cuda,
+                }
+                for mid, v in QWEN3_ASR_VARIANTS.items()
+            ]
         engines.append(info)
     return {"engines": engines, "cuda_available": cuda}
 

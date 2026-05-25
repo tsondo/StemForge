@@ -78,6 +78,19 @@ Lyrics transcription feature on the MIDI tab.
 
 ---
 
+## Qwen3-ASR — Alibaba Cloud (Tongyi Lab)
+
+Multilingual automatic speech recognition model used as the GPU-backed
+engine in the Lyrics transcription feature on the MIDI tab. Trained
+specifically for speech and singing voice recognition across 52 languages.
+
+- **Model:** https://huggingface.co/Qwen/Qwen3-ASR-1.7B
+- **Paper:** Shi et al. — *Qwen3-ASR Technical Report* (arXiv:2601.21337, 2026)
+- **License:** Apache 2.0 (see `licenses/LICENSE-Qwen3-ASR`)
+- **Toolkit:** https://github.com/QwenLM/Qwen3-ASR
+
+---
+
 ## Stable Audio Open — Stability AI
 
 Text-conditioned audio generation model powering the Synth tab.

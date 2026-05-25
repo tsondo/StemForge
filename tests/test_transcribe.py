@@ -296,6 +296,46 @@ def test_qwen_conversation_construction() -> None:
     print("qwen_conversation_construction OK")
 
 
+def test_qwen3_asr_engine_registration() -> None:
+    """Verify the Qwen3-ASR engine class is registered with correct metadata."""
+    from pipelines.transcribe_engines import ENGINES
+    from pipelines.transcribe_engines.qwen3_asr_engine import (
+        Qwen3AsrEngine, QWEN3_ASR_VARIANTS,
+    )
+
+    assert "qwen3-asr" in ENGINES
+    assert ENGINES["qwen3-asr"] is Qwen3AsrEngine
+    assert "qwen3-asr-1.7b" in QWEN3_ASR_VARIANTS
+    assert "qwen3-asr-0.6b" in QWEN3_ASR_VARIANTS
+
+    # Invalid model_id raises.
+    try:
+        Qwen3AsrEngine(model_id="bogus")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("Expected ValueError for unknown model_id")
+
+    # Valid construction (no .load() called — that requires CUDA + weights).
+    engine = Qwen3AsrEngine(model_id="qwen3-asr-1.7b")
+    assert engine.engine_id == "qwen3-asr"
+    assert engine.requires_gpu is True
+
+    print("qwen3_asr_engine_registration OK")
+
+
+def test_qwen3_asr_language_resolution() -> None:
+    """Verify ISO code → Qwen3-ASR language name mapping."""
+    from pipelines.transcribe_engines.qwen3_asr_engine import _resolve_language
+
+    assert _resolve_language("es") == "Spanish"
+    assert _resolve_language("en") == "English"
+    assert _resolve_language("Spanish") == "Spanish"   # passthrough for already-resolved names
+    assert _resolve_language(None) is None
+    assert _resolve_language("") is None
+    print("qwen3_asr_language_resolution OK")
+
+
 if __name__ == "__main__":
     main()
     test_collapse_repetitions()
@@ -310,3 +350,5 @@ if __name__ == "__main__":
     test_qwen_stitcher_single_token_stopword_rejected()
     test_qwen_stitcher_single_token_short_rejected()
     test_qwen_conversation_construction()
+    test_qwen3_asr_engine_registration()
+    test_qwen3_asr_language_resolution()
