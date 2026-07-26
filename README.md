@@ -247,7 +247,7 @@ The model weights (~2 GB) are downloaded on the first Synth run and cached under
     git clone --recursive git@github.com:tsondo/StemForge.git
     cd StemForge
 
-**Step 3** — Sync environment (downloads Python 3.11, PyTorch, and all dependencies — first run takes a few minutes):
+**Step 3** — Sync environment (downloads Python 3.12, PyTorch, and all dependencies — first run takes a few minutes):
 
     uv sync
 
@@ -409,7 +409,7 @@ All pipelines and the full web UI are implemented and working:
 - Mix tab — per-track instrument/volume controls, audio/MIDI/synth/compose source types, FLAC render
 - Export panel — all pipeline outputs, 4 audio formats (wav/flac/mp3/ogg), zip download
 - Waveform visualization via wavesurfer.js with global transport bar
-- Deterministic uv environment, Python 3.11, CUDA 13.0 wheels
+- Deterministic uv environment, Python 3.12, CUDA 13.0 wheels
 - macOS support via MPS acceleration (separate `pyproject.toml.MAC`)
 
 StemForge is evolving into a musical playground where you can regenerate and remix any part of any song.

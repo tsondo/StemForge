@@ -79,11 +79,11 @@ The `-s` flag uses the name and email from your Git configuration
 ## Prerequisites
 
 ### Python
-StemForge requires **Python 3.11**.
+StemForge requires **Python 3.12**.
 
 If your system Python differs:
 
-    uv python install 3.11
+    uv python install 3.12
 
 ### uv
 Install uv:

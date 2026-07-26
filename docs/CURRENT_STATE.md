@@ -82,7 +82,7 @@ Job submission + polling pattern for long-running ML tasks in the FastAPI backen
 
 Tools & resources
 
-Backend: Python 3.11, FastAPI, numpy, PyTorch (CUDA 13.0 / MPS), huggingface_hub, uv
+Backend: Python 3.12, FastAPI, numpy, PyTorch (CUDA 13.0 / MPS), huggingface_hub, uv
 ML models: Demucs, BS-Roformer, BasicPitch, Stable Audio Open, AceStep 1.5, torchcrepe, python-audio-separator (vendored), Applio/RVC (vendored)
 Frontend: Vanilla HTML/CSS/JS, fetch() + polling, wavesurfer.js (CDN)
 Dev tooling: Claude Code CLI, Git submodules
