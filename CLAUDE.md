@@ -7,11 +7,12 @@
 
 ## What this project is
 
-AI-powered audio processing web application with six core pipelines:
+AI-powered audio processing web application with seven core pipelines:
 - **Demucs** — source separation (vocals, drums, bass, other) — 4 models
 - **BS-Roformer** — high-quality separation with 2-stem, 4-stem, and 6-stem (guitar + piano) models
 - **BasicPitch** — polyphonic MIDI extraction from separated stems (instruments)
 - **Vocal MIDI** — vocal pitch-to-MIDI via faster-whisper + PYIN pitch tracking
+- **ADTOF** — drum stem transcription to GM channel-10 MIDI (kick, snare, tom, hi-hat, cymbal); drum-labelled stems auto-route here instead of BasicPitch. Weights are CC BY-NC-SA 4.0 — extraction is gated behind a UI license acknowledgment
 - **Stable Audio Open** — text-conditioned audio generation with optional audio and MIDI conditioning (Synth tab)
 - **AceStep** — full song generation from style descriptions + lyrics (Compose tab, runs as subprocess)
 
@@ -38,7 +39,7 @@ All pipelines and the full web UI are implemented:
 - Demucs separation — 4 models (htdemucs, htdemucs_ft, mdx_extra, mdx_extra_q), CUDA fallback for MDX-Net
 - BS-Roformer separation — 6 models including ViperX vocals (SDR 12.97), KJ vocals, ZFTurbo 4-stem, jarredou 6-stem
 - Automatic engine/model recommendation from spectral audio analysis
-- MIDI extraction — BasicPitch for instruments, faster-whisper + PYIN pitch for vocals
+- MIDI extraction — BasicPitch for instruments, faster-whisper + PYIN pitch for vocals, ADTOF for drums (channel 10, license-gated)
 - MIDI preview — server-side FluidSynth render, streamed to browser via wavesurfer.js
 - Mix tab — per-track volume controls, audio/MIDI source types, FLAC render, multi-track preview
 - Stable Audio Open generation (Synth tab) — text + audio + MIDI conditioning, up to 600 s (chunked at 47 s), Vocal Preservation Mode
@@ -127,6 +128,7 @@ StemForge/
 │   ├── roformer_loader.py
 │   ├── midi_loader.py
 │   ├── basicpitch_loader.py
+│   ├── adtof_loader.py
 │   ├── basicpitch/
 │   └── musicgen_loader.py
 │
@@ -193,6 +195,7 @@ utils/  →  models/  →  pipelines/  →  backend/services/  →  backend/api/
 | GET | /api/midi/stems | sync | Available MIDI stem labels |
 | POST | /api/generate | job | Start audio generation (Synth) |
 | GET | /api/compose/health | sync | AceStep subprocess status |
+| POST | /api/compose/start | async | Launch AceStep on first use (idempotent) |
 | POST | /api/compose/generate | async | Start AceStep generation (Compose) |
 | GET | /api/compose/status/{id} | sync | Poll AceStep task status |
 | GET | /api/compose/audio | sync | Audio proxy from AceStep |
@@ -329,6 +332,7 @@ Frozen `ModelSpec` subclasses describe every model variant. Spec types:
 | `DemucsSpec` | htdemucs, htdemucs_ft, mdx_extra, mdx_extra_q | `DemucsPipeline` |
 | `RoformerSpec` | roformer-viperx-vocals, roformer-kj-vocals, roformer-zfturbo-4stem, roformer-jarredou-6stem, + 2 more | `RoformerPipeline` |
 | `BasicPitchSpec` | basicpitch | `BasicPitchPipeline` |
+| `DrumMidiSpec` | adtof-drums | `MidiPipeline` (drum routing branch) |
 | `WhisperSpec` | whisper-tiny, whisper-small, whisper-large-v3 | `VocalMidiPipeline`, `TranscribePipeline` |
 | `StableAudioSpec` | stable-audio-open-1.0 | `MusicGenPipeline` |
 
@@ -376,18 +380,23 @@ StemForgeError
 
 ## AceStep subprocess
 
-AceStep runs as a separate process managed by `run.py`:
+AceStep runs as a separate process, spawned lazily on first use (`POST
+/api/compose/start`) via `acestep_state.launch()`:
 
-- **Port:** 8001 (configurable via `--acestep-port` or `ACESTEP_PORT`)
+- **Port:** 8001 (configurable via `--acestep-port` or `ACESTEP_PORT`); launch()
+  pre-checks the port and reports a clear error if something already holds it
+- **Model loading:** `ACESTEP_NO_INIT=false` is set at launch (overridable via env)
+  — upstream defaults to lazy loading, which deadlocks the "running" status gate
 - **Disable:** `--no-acestep` flag — Compose tab shows disabled state
-- **GPU:** `--gpu N` sets `CUDA_VISIBLE_DEVICES` on the AceStep subprocess only
+- **GPU:** `--gpu N` sets `CUDA_VISIBLE_DEVICES` (and `HIP_VISIBLE_DEVICES` for
+  ROCm) on the AceStep subprocess only
 - **Deterministic:** `--deterministic` flag — sets near-greedy LM temperature (0.01) when seed is set + CUDA deterministic ops on AceStep subprocess. Useful for A/B testing LoRA vs base model.
 - **State tracking:** `backend/services/acestep_state.py` — thread-safe status: disabled/starting/running/crashed
 - **Graceful degradation:** StemForge stays alive if AceStep crashes. All other tabs work normally.
 - **Compose router:** `backend/api/compose.py` proxies requests to AceStep's API via `backend/api/acestep_wrapper.py` — includes generation, LoRA management (6 endpoints), and training pipeline (20+ endpoints)
 - **LoRA directory:** `Ace-Step-Wrangler/loras/` (configurable via `LORA_DIR` env var) — scanned for PEFT dirs and .safetensors files
 - **Training directory:** `Ace-Step-Wrangler/training/` (configurable via `TRAIN_DIR` env var) — audio, tensors, output, snapshots subdirs
-- **Submodule:** `Ace-Step-Wrangler/` (with nested `vendor/ACE-Step-1.5/`). To pull upstream changes: `cd Ace-Step-Wrangler && git pull origin main && cd .. && git add Ace-Step-Wrangler && git commit`
+- **Submodule:** `Ace-Step-Wrangler/` (with nested `vendor/ACE-Step-1.5/`). To pull upstream changes: `cd Ace-Step-Wrangler && git pull origin main && cd .. && git add Ace-Step-Wrangler && git commit` — Dependabot also PRs pointer updates weekly
 
 **Tab bar:** Separate · Enhance · MIDI · Synth · Compose · Mix · Export
 
@@ -397,7 +406,9 @@ AceStep runs as a separate process managed by `run.py`:
 
 - **Linux (primary)**: CUDA 13.0 wheels, uv sync, Python 3.12
 - **macOS (Apple Silicon)**: MPS acceleration via `pyproject.toml.MAC`; use `from utils.device import get_device`, never hardcode `"cuda"`
+- **AMD (ROCm)**: `pyproject.toml.ROCM` — rocm7.1 torch index, same pins; resolution-verified but untested on hardware (issue #11)
 - **FluidSynth**: Required for MIDI preview and Mix tab; GM soundfont auto-discovered
+- **CI**: GitHub Actions (`.github/workflows/ci.yml`) — lock drift check, ROCm resolve-only check, and a CPU test job on every PR/push; Dependabot updates action versions and submodule pointers weekly
 
 ---
 

@@ -4,11 +4,11 @@ Pipeline stack:
 
 Demucs – stem separation (4 models)
 BS-Roformer – stem separation (6 models including 4-stem and 6-stem)
-BasicPitch / Vocal MIDI – MIDI extraction (instruments / vocals)
+BasicPitch / Vocal MIDI / ADTOF – MIDI extraction (instruments / vocals / drums)
 Stable Audio Open ("Synth" tab) – sound/texture generation
 AceStep / ACE-Step-Wrangler ("Compose" tab) – AI music composition (Create, Rework, Lego, Complete, Voice, Train modes)
 UVR / audio-separator ("Enhance" tab, Clean Up) – denoise/dereverb (8 presets)
-Auto-Tune ("Enhance" tab, Tune) – CREPE pitch detection + Praat PSOLA resynthesis
+Auto-Tune ("Enhance" tab, Tune) – CREPE pitch detection + WORLD/STFT resynthesis
 RVC / Applio ("Compose" tab, Voice) – AI voice conversion (14 built-in voices + HuggingFace search)
 
 Architecture: FastAPI backend ("thick backend" — pipelines run in-process) with vanilla HTML/CSS/JS frontend. This was migrated from a DearPyGUI desktop application. The frontend follows a dark DAW aesthetic with tab-based navigation (Separate → Enhance → MIDI → Synth → Compose → Mix → Export). ACE-Step-Wrangler is integrated as a git submodule in a vendor directory.
@@ -20,7 +20,7 @@ StemForge v1.0.0 is published and actively developed post-release. All core pipe
 
 **What's working:**
 - Demucs + BS-Roformer stem separation (10 models total), batch mode, auto engine recommendation
-- MIDI extraction for instruments (BasicPitch) and vocals (faster-whisper + PYIN)
+- MIDI extraction for instruments (BasicPitch), vocals (faster-whisper + PYIN), and drums (ADTOF — kick/snare/tom/hi-hat/cymbal → GM channel 10; drum stems auto-route away from BasicPitch; idea from community PR #10, reimplemented to conventions as PR #12). ADTOF weights are CC BY-NC-SA 4.0 and the port code is unlicensed — documented in THIRD-PARTY-NOTICES.md and gated behind a UI acknowledgment like the jarredou model
 - **Lyrics transcription (MIDI tab)** — Notes/Lyrics mode bar; engine dropdown offers three families: **Whisper Large v3** (recommended, plus Whisper Small and Whisper Tiny as CPU-friendly / fastest alternates), **Qwen3-ASR 1.7B** (~7 GB VRAM, recommended Qwen variant for music), and **Qwen3-ASR 0.6B** (~3 GB VRAM, faster). Outputs `.txt` / `.lrc` / `.srt`; optional hint field biases vocabulary; `Send to Compose` integration with the AI lyrics workflow. *(Addendum 8: Qwen2-Audio and its NF4 variant were removed in favor of the purpose-built Qwen3-ASR family — see `docs/LYRICS_TRANSCRIPTION_SPEC_ADDENDUM_8.md`.)*
 - Enhance tab with three-mode bar: Clean Up (8 UVR presets), Tune (CREPE + WORLD/STFT auto-tune), Effects (EQ, Compressor with DSP/LA-2A neural, Noise Gate with DSP/Spectral, Stereo Width)
 - Stable Audio Open generation (Synth tab) — text + audio + MIDI conditioning, chunked to 600s
@@ -41,9 +41,16 @@ StemForge v1.0.0 is published and actively developed post-release. All core pipe
 - MODEL_LOCATION environment variable shares model checkpoints across installations
 - HuggingFace token: `huggingface-cli login` or `HF_TOKEN` in .env
 
+**Toolchain / infrastructure (July 2026):**
+- **Python 3.12 migration** — full stack verified on 3.12 (PR #13); 3.13 blocked upstream (vendored ACE-Step and nano-vllm declare `<3.13`). Trade-off: nano-vllm's prebuilt flash-attn wheel is marker-pinned to 3.11, so the AceStep LM uses its SDPA fallback on 3.12
+- **ROCm variant** — `pyproject.toml.ROCM` (AMD GPUs, rocm7.1 torch index, same pins); resolution-verified only, awaiting community hardware validation (issue #11). `--gpu` also sets `HIP_VISIBLE_DEVICES`
+- **GitHub Actions CI** — three jobs on every PR/push: `uv lock --check` drift guard, resolve-only check of the ROCm variant, and a full-sync test job (FFmpeg + FluidSynth system deps, CUDA hidden, pytest subset)
+- **Dependabot** — weekly PRs for action versions and the Wrangler submodule pointer (Wrangler repo has its own config for the nested ACE-Step vendor submodule); Dependabot alerts + security updates enabled on both repos. Python version pins deliberately excluded from auto-bumping
+- **AceStep startup hardening** — `ACESTEP_NO_INIT=false` set at launch (new upstream default is lazy loading, which deadlocked the "running" gate) and a port pre-check that reports a clear error instead of a doomed spawn
+
 Known issues / technical debt:
 
-- Inadequate automated testing coverage.
+- Automated testing coverage is thin but no longer absent: CI runs a pytest subset (compose backend, GPU scheduler, vocal MIDI, VP mode, drum MIDI routing) on every PR; older script-style files in tests/ are not pytest-compatible and are excluded.
 - Documented but unsolved GPU contention between AceStep (subprocess) and in-process pipelines.
 - Vanilla JS frontend is substantial (~8K lines across components) but well-organized with event bus pattern; evaluated React adoption and determined it's not yet justified.
 - Potential scope creep from numerous planned features.
@@ -55,6 +62,7 @@ Effects Chain improvements: Convolution reverb (IR loading), delay, and chorus e
 RVC voice model training: Train custom voice models from audio samples within StemForge. Architecture evaluated, ~15–22 hours implementation. See FUTURE_PLANS.md.
 DAW connectivity: Options ranging from drag-and-drop export to REST bridge plugins.
 macOS support: MPS acceleration works via `pyproject.toml.MAC`. Further polish needed.
+ROCm (AMD GPU) support: `pyproject.toml.ROCM` shipped, resolution-verified; waiting on community hardware testing (issue #11).
 Native installable packages (RPM for Linux, MSI for Windows) — explored but not yet implemented.
 
 
@@ -67,6 +75,10 @@ Non-destructive editing with JSON manifests is the right approach for the sound 
 Sequential pipelines don't benefit from multi-GPU load balancing in a single-user desktop context.
 GitHub search indexing ≠ ranking: Zero-star/zero-fork repos with minimal READMEs rank poorly regardless of indexing; rich metadata and external mentions are the practical fix.
 torchao is PyTorch's Architecture Optimization library for quantization/low-precision inference — a transitive dependency via AceStep, not needed directly.
+uv `tool.uv.sources` index pins only apply to direct dependencies — rocm-only transitive deps (triton-rocm) must be declared directly to resolve from an explicit index.
+Not every GitHub action maintains a moving major tag: astral-sh/setup-uv needs an exact release tag (e.g. `v9.0.0`), unlike actions/checkout.
+WSL2 mirrored networking shares ports with Windows: a Windows-side listener (e.g. a stale `netsh portproxy` rule under IP Helper) blocks Linux binds and is invisible to `ss`/`ps` inside WSL.
+Model licensing needs checking at PR review time, not after merge: ADTOF weights (CC BY-NC-SA 4.0) landed on main before their notices/gate did.
 
 
 Approach & patterns
@@ -83,8 +95,8 @@ Job submission + polling pattern for long-running ML tasks in the FastAPI backen
 Tools & resources
 
 Backend: Python 3.12, FastAPI, numpy, PyTorch (CUDA 13.0 / MPS), huggingface_hub, uv
-ML models: Demucs, BS-Roformer, BasicPitch, Stable Audio Open, AceStep 1.5, torchcrepe, python-audio-separator (vendored), Applio/RVC (vendored)
+ML models: Demucs, BS-Roformer, BasicPitch, ADTOF (drum transcription), Stable Audio Open, AceStep 1.5, torchcrepe, python-audio-separator (vendored), Applio/RVC (vendored)
 Frontend: Vanilla HTML/CSS/JS, fetch() + polling, wavesurfer.js (CDN)
-Dev tooling: Claude Code CLI, Git submodules
+Dev tooling: Claude Code CLI, Git submodules, GitHub Actions CI, Dependabot
 Dependency management: pyproject.toml with path dependencies for submodules (ace-step, nano-vllm)
 Version control / hosting: GitHub (github.com/tsondo/StemForge)
