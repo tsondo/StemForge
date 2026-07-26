@@ -4,3 +4,9 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+  # PRs the Ace-Step-Wrangler submodule pointer forward when its main moves.
+  # The nested vendor/ACE-Step-1.5 submodule is managed by the Wrangler repo.
+  - package-ecosystem: "gitsubmodule"
+    directory: "/"
+    schedule:
+      interval: "weekly"
