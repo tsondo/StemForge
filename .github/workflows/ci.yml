@@ -10,10 +10,10 @@ jobs:
   lock-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v9
       - run: uv lock --check
 
   # Resolve-only check of the ROCm variant — keeps pyproject.toml.ROCM from
@@ -22,10 +22,10 @@ jobs:
   rocm-resolve:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v9
       - name: Resolve ROCm variant
         run: |
           cp pyproject.toml.ROCM pyproject.toml
@@ -36,14 +36,14 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: recursive
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg libfluidsynth3 fluid-soundfont-gm
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v9
       - name: Sync environment
         run: uv sync
         env:
