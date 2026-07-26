@@ -184,6 +184,20 @@ class BasicPitchSpec(ModelSpec):
 
 
 @dataclass(frozen=True, slots=True)
+class DrumMidiSpec(ModelSpec):
+    """Descriptor for an automatic drum transcription (ADT) model.
+
+    Additional fields
+    -----------------
+    class_labels:
+        Human-readable label for each drum output class, in model
+        output order.
+    """
+
+    class_labels: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class WhisperSpec(ModelSpec):
     """Descriptor for a faster-whisper vocal transcription model.
 
@@ -441,6 +455,36 @@ BASICPITCH = _register(BasicPitchSpec(
     min_note_range=(20.0, 500.0),
     default_onset=0.5,
     default_frame=0.3,
+))
+
+# ---------------------------------------------------------------------------
+# Drum transcription (ADT)
+# ---------------------------------------------------------------------------
+
+ADTOF_DRUMS = _register(DrumMidiSpec(
+    model_id="adtof-drums",
+    display_name="ADTOF Drums (5-class)",
+    version="0.1.0",
+    source="xavriley/ADTOF-pytorch",
+    device="auto",
+    gpu_capable=True,
+    device_fallback="cpu",
+    device_quirks="",
+    sample_rate=44_100,
+    hop_size=0,
+    chunk_size=0,
+    max_duration_seconds=0.0,
+    default_bpm=0.0,
+    default_key="",
+    default_time_signature="",
+    quantize_grid="none",
+    default_min_note_ms=0.0,
+    capabilities=frozenset({"transcribe", "gpu_acceleration"}),
+    cache_subdir="adtof",
+    description="Automatic drum transcription — kick, snare, tom, hi-hat, cymbal on GM channel 10.",
+    preprocessing="Mono downmix; resample to 44 100 Hz internally; log-frequency spectrogram.",
+    postprocessing="Per-class peak picking; GM percussion note mapping; 60 ms note duration.",
+    class_labels=("kick", "snare", "tom", "hi_hat", "cymbal"),
 ))
 
 # ---------------------------------------------------------------------------
