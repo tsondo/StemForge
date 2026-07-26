@@ -82,7 +82,7 @@ STEM_DEFAULT_PROGRAM: dict[str, int] = {
     "other": 48,        # String Ensemble 1
 }
 
-STEM_IS_DRUM: dict[str, bool] = {label: True for label in DRUM_STEM_LABELS}
+STEM_IS_DRUM: dict[str, bool] = dict.fromkeys(DRUM_STEM_LABELS, True)
 
 # ─── SoundFont discovery & state ─────────────────────────────────────────
 

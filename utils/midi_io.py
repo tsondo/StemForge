@@ -296,7 +296,7 @@ DRUM_STEM_LABELS: frozenset[str] = frozenset({
     "Drums & percussion",     # BS-Roformer 4/6-stem output label
 })
 
-_STEM_IS_DRUM: dict[str, bool] = {label: True for label in DRUM_STEM_LABELS}
+_STEM_IS_DRUM: dict[str, bool] = dict.fromkeys(DRUM_STEM_LABELS, True)
 
 
 def merge_tracks(
