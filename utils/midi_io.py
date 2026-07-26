@@ -288,10 +288,15 @@ _STEM_GM_PROGRAM: dict[str, int] = {
     "generated":             0,   # Acoustic Grand Piano
 }
 
-_STEM_IS_DRUM: dict[str, bool] = {
-    "drums":              True,
-    "Drums & percussion": True,
-}
+# Canonical set of stem labels that represent drums/percussion.  Single
+# source of truth — the MIDI pipeline (ADT routing) and the API layer
+# (track defaults) both derive from this.
+DRUM_STEM_LABELS: frozenset[str] = frozenset({
+    "drums",                  # Demucs output label
+    "Drums & percussion",     # BS-Roformer 4/6-stem output label
+})
+
+_STEM_IS_DRUM: dict[str, bool] = {label: True for label in DRUM_STEM_LABELS}
 
 
 def merge_tracks(
