@@ -1,0 +1,240 @@
+# =============================================================================
+# pyproject.toml.ROCM — AMD GPU (ROCm) variant.  UNTESTED on real hardware.
+#
+# Usage: cp pyproject.toml.ROCM pyproject.toml && uv sync
+# Requires a working ROCm 7.1 runtime (https://rocm.docs.amd.com).
+#
+# Differences from the CUDA pyproject:
+#   - torch/torchaudio/torchvision come from the rocm7.1 wheel index
+#   - nvidia-cuda-runtime-cu12 removed (CUDA-only)
+#   - flash-attn is CUDA-only and already excluded by its wheel marker;
+#     the AceStep LM backend auto-falls back to SDPA attention
+#   - faster-whisper (ctranslate2) and UVR enhance (onnxruntime) run on CPU
+# =============================================================================
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "stemforge"
+version = "0.1.0"
+description = "AI-powered stem separation, MIDI extraction, and music generation — web UI"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = "==3.12.*"
+authors = [
+    { name = "Todd Green", email = "info@tsondo.com" },
+]
+keywords = [
+    "audio",
+    "stem-separation",
+    "midi",
+    "music-generation",
+    "demucs",
+    "basicpitch",
+    "musicgen",
+]
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Intended Audience :: End Users/Desktop",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+    "Topic :: Multimedia :: Sound/Audio :: Editors",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
+
+# ---------------------------------------------------------------------------
+# Runtime dependencies — REAL, VERIFIED, EXECUTION-READY
+# ---------------------------------------------------------------------------
+dependencies = [
+    # Core PyTorch stack — ROCm 7.1 wheels via pytorch-rocm index below.
+    "torch==2.10.0",
+    "torchaudio==2.10.0",
+    # torch+rocm requires triton-rocm, which exists only on the rocm index;
+    # declared directly so the tool.uv.sources index pin applies to it.
+    "triton-rocm",
+
+    # GitHub-pinned ML components (renamed distributions)
+    "demucs @ git+https://github.com/facebookresearch/demucs.git@v4.0.1",
+    #"basic-pitch @ git+https://github.com/spotify/basic-pitch.git",    
+
+    # Demucs deps
+    "dora-search==0.1.12",
+    "submitit==1.5.4",
+    "openunmix==1.3.0",
+    "julius==0.2.7",
+    "lameenc==1.8.1",
+    "diffq==0.2.4",    # required by mdx_extra_q (quantized MDX model)
+
+    # BasicPitch deps
+    "pretty_midi==0.2.11",
+    "mir_eval==0.8.2",
+    "resampy>=0.4.0",
+    "setuptools==68.0.0",
+    "ai-edge-litert>=1.1.0",
+
+
+    # Audio I/O + DSP
+    "soundfile==0.13.1",
+    "numpy>=2.0.0",
+    "scipy==1.13.0",
+    "librosa==0.11.0",
+    "soxr==1.0.0",
+    "pydub==0.25.1",
+
+    # MIDI I/O
+    "mido==1.3.3",
+
+    # Vocal MIDI pipeline
+    "faster-whisper>=1.0.0",
+
+    # BS-Roformer separation
+    "bs-roformer>=0.3.2",
+    "pyyaml>=6.0.0",
+
+    # Stable Audio Open (via diffusers — avoids laion-clap / numpy conflict)
+    "diffusers>=0.30.0",
+    "torchsde>=0.2.6",
+    "transformers>=4.40.0",
+    "accelerate>=0.30.0",
+    # Qwen3-ASR — purpose-built ASR for the Lyrics tab (Addendum 8)
+    "qwen-asr>=0.0.6",
+    "safetensors>=0.4.2",
+    "einops>=0.7.0",
+    "huggingface_hub>=0.23.0",
+    "hf-xet>=1.0.0",
+
+    # Web backend
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "python-multipart>=0.0.9",
+    "httpx>=0.28.1",
+
+    # ACE-Step music generation (resolved via [tool.uv.sources])
+    "ace-step",
+    "nano-vllm",
+    "torchvision",
+
+    # RVC voice conversion (vendor/rvc)
+    "faiss-cpu>=1.9.0",
+    "torchcrepe>=0.0.22",
+    "torchfcpe>=0.0.4",
+    "noisereduce>=3.0.0",
+    "stftpitchshift>=1.5.0",
+
+    # Audio enhancement — UVR denoise/dereverb (vendored fork)
+    "audio-separator",
+
+    # Auto-tune — WORLD vocoder for pitch-corrected resynthesis
+    "pyworld>=0.3.0",
+
+    # Effects chain — spectral noise gate
+    "torchgating>=0.1.3b0",
+    # NOTE: deepfilternet requires numpy<2.0 — incompatible with our numpy>=2.0.
+    # DeepFilterNet gate method is disabled at runtime; imported lazily with a
+    # clear error if the user tries to select it.
+
+    # MIDI cleanup, analysis, and sheet music (music21)
+    "music21>=9.1,<10",
+
+    # Audio playback / MIDI render
+    "pyfluidsynth>=1.3.4",
+
+    # .env loading
+    "python-dotenv>=1.0.0",
+]
+
+# ---------------------------------------------------------------------------
+# Dependency groups (PEP 735) — uv dev tooling
+# ---------------------------------------------------------------------------
+[dependency-groups]
+dev = [
+    "pip",
+    "pytest>=9.0.2",
+]
+
+# ---------------------------------------------------------------------------
+# Optional dependency groups (PEP 508 extras)
+# ---------------------------------------------------------------------------
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.4.0",
+    "mypy>=1.9.0",
+    "pre-commit>=3.7.0",
+]
+
+# ---------------------------------------------------------------------------
+# Console scripts
+# ---------------------------------------------------------------------------
+[project.scripts]
+stemforge = "run:main"
+
+#----------------------------------------------------------------------------
+# Tool hints ----------------------------------------------------------------
+[tool.uv]
+environments = ["python_version == '3.12' and sys_platform == 'linux' and platform_machine == 'x86_64'"]
+# Override ace-step's cu128-pinned torch packages to use the rocm index
+override-dependencies = [
+    "torch==2.10.0",
+    "torchaudio==2.10.0",
+    "torchvision==0.25.0",
+]
+[[tool.uv.index]]
+name = "pytorch-rocm"
+url = "https://download.pytorch.org/whl/rocm7.1"
+explicit = true
+[tool.uv.sources]
+torch = { index = "pytorch-rocm" }
+torchaudio = { index = "pytorch-rocm" }
+torchvision = { index = "pytorch-rocm" }
+triton-rocm = { index = "pytorch-rocm" }
+ace-step = { path = "Ace-Step-Wrangler/vendor/ACE-Step-1.5", editable = true }
+nano-vllm = { path = "Ace-Step-Wrangler/vendor/ACE-Step-1.5/acestep/third_parts/nano-vllm" }
+audio-separator = { path = "vendor/python-audio-separator" }
+
+#---------------------------------------------------------------------------
+# Hatchling build configuration
+# ---------------------------------------------------------------------------
+[tool.hatch.build.targets.wheel]
+packages = ["backend", "pipelines", "models", "utils"]
+include = ["config.py", "run.py"]
+artifacts = ["frontend/**"]
+[tool.hatch.metadata]
+allow-direct-references = true
+
+# ---------------------------------------------------------------------------
+# Ruff – linter and formatter
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["config", "backend", "pipelines", "models", "utils"]
+
+# ---------------------------------------------------------------------------
+# Mypy – static type checking
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = false
+warn_unused_ignores = true
+warn_return_any = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--tb=short -q"

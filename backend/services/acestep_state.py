@@ -152,6 +152,9 @@ def launch() -> bool:
     env = os.environ.copy()
     if gpu:
         env["CUDA_VISIBLE_DEVICES"] = gpu
+        # ROCm builds of torch select devices via HIP_VISIBLE_DEVICES;
+        # setting both makes --gpu work on NVIDIA and AMD alike.
+        env["HIP_VISIBLE_DEVICES"] = gpu
     for var in _PASSTHROUGH_VARS:
         if var in os.environ:
             env[var] = os.environ[var]
