@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # Guard against pyproject.toml / uv.lock drift.
+  lock-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: astral-sh/setup-uv@v5
+      - run: uv lock --check
+
+  # Resolve-only check of the ROCm variant — keeps pyproject.toml.ROCM from
+  # silently desynchronizing when the main pyproject changes.  No install;
+  # just proves the dependency graph still resolves against the rocm index.
+  rocm-resolve:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: astral-sh/setup-uv@v5
+      - name: Resolve ROCm variant
+        run: |
+          cp pyproject.toml.ROCM pyproject.toml
+          uv lock
+
+  # Full install + the pytest-style test files.  Runners are CPU-only, so
+  # CUDA is hidden explicitly; the CUDA wheels install fine without a GPU.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libfluidsynth3 fluid-soundfont-gm
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync environment
+        run: uv sync
+        env:
+          UV_NO_CACHE: "1"  # CUDA wheels are large; don't keep a second copy on disk
+      - name: Run tests
+        run: >
+          uv run pytest -q
+          tests/test_midi_io_drum.py
+          tests/test_midi_pipeline_drum_routing.py
+          tests/test_compose_backend.py
+          tests/test_gpu_scheduler.py
+          tests/test_vocal_midi_pipeline.py
+          tests/test_vp_mode.py
+        env:
+          CUDA_VISIBLE_DEVICES: ""
