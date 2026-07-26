@@ -42,6 +42,7 @@ automatically on first use and cached locally.
 | UVR separation models (Roformer, MDXC, VR) | UVR / Anjok07 | MIT | Yes | [github.com/Anjok07/ultimatevocalremovergui](https://github.com/Anjok07/ultimatevocalremovergui) |
 | RVC voice models (built-in + HuggingFace) | Various | Various | Check per model | Various HuggingFace repos |
 | RMVPE pitch model | RVC-Project | MIT | Yes | [github.com/RVC-Project/Retrieval-based-Voice-Conversion](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion) |
+| ADTOF drum transcription (bundled in `adtof-pytorch` package) | M. Zehren et al. / xavriley (port) | **CC BY-NC-SA 4.0 (weights); port code unlicensed** | **No — see warning below** | [github.com/xavriley/ADTOF-pytorch](https://github.com/xavriley/ADTOF-pytorch) |
 
 ---
 
@@ -102,6 +103,36 @@ This means:
 
 The weights (~55 MB) are automatically downloaded on first use of the
 "Neural Vocoder (GPU)" method in the Tune tab.
+
+### ADTOF drum transcription (CC BY-NC-SA 4.0 weights; unlicensed port code)
+
+The drum MIDI path uses the [ADTOF-pytorch](https://github.com/xavriley/ADTOF-pytorch)
+port of [ADTOF](https://github.com/MZehren/ADTOF) (Zehren, Alunno & Bientinesi).
+Two distinct license concerns apply:
+
+**The model weights are CC BY-NC-SA 4.0.** The upstream ADTOF repository licenses
+its entire content — code, dataset, and pretrained models — under **Creative
+Commons Attribution-NonCommercial-ShareAlike 4.0 International**. The
+ADTOF-pytorch weights were converted directly from the officially released
+weights and are therefore derivative works carrying the same license:
+
+- **NonCommercial**: The weights may only be used for non-commercial purposes.
+  StemForge itself is Apache 2.0 and permits commercial use, but drum MIDI
+  extracted with these weights does not — users need separately licensed weights
+  or their own trained model for commercial applications.
+- **ShareAlike**: Derivative works using these weights must be shared under the
+  same or a compatible license.
+
+**The port's own code has no license.** The ADTOF-pytorch repository and package
+contain no license file or license metadata. Under copyright law, absence of a
+license means **all rights are reserved** and no rights are granted to use,
+modify, or distribute the work.
+
+Unlike most models in this document, the ADTOF weights are **bundled inside the
+`adtof-pytorch` pip dependency** — they are installed with the application, not
+downloaded on first use. StemForge gates the drum transcription path behind an
+explicit user acknowledgment in the MIDI tab. **Users who proceed do so at their
+own legal risk.**
 
 ### Other notes
 

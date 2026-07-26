@@ -48,6 +48,24 @@ Polyphonic audio-to-MIDI transcription for instrument stems in the MIDI tab.
 
 ---
 
+## ADTOF — Mickaël Zehren, Marco Alunno & Paolo Bientinesi
+
+Automatic drum transcription powering the drum path in the MIDI tab
+(kick, snare, tom, hi-hat, cymbal → GM channel 10).
+
+- **Repository:** https://github.com/MZehren/ADTOF
+- **Papers:** Zehren, Alunno & Bientinesi — *ADTOF: A large dataset of non-synthetic music for automatic drum transcription* (ISMIR 2021); *High-quality and reproducible automatic drum transcription from crowdsourced data* (2023)
+- **License:** CC BY-NC-SA 4.0 (code, dataset, and pretrained models — see THIRD-PARTY-NOTICES.md)
+
+### ADTOF-pytorch port — xavriley
+
+PyTorch port with bundled weights converted from the official release, used by
+StemForge via pip dependency.
+
+- **Repository:** https://github.com/xavriley/ADTOF-pytorch
+
+---
+
 ## Whisper — OpenAI
 
 Speech recognition model used (via faster-whisper) for vocal pitch-to-MIDI extraction.
