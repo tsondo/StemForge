@@ -44,6 +44,7 @@ dependencies = [
 
     # GitHub-pinned ML components (renamed distributions)
     "demucs @ git+https://github.com/facebookresearch/demucs.git@v4.0.1",
+    "adtof-pytorch @ git+https://github.com/xavriley/ADTOF-pytorch@85c192e",
     #"basic-pitch @ git+https://github.com/spotify/basic-pitch.git",    
 
     # Demucs deps

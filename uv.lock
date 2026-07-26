@@ -133,6 +133,17 @@ requires-dist = [
 dev = []
 
 [[package]]
+name = "adtof-pytorch"
+version = "0.1.0"
+source = { git = "https://github.com/xavriley/ADTOF-pytorch?rev=85c192e#85c192e78f716ea0b111cc8a5ee4a8f6a3a4f8a9" }
+dependencies = [
+    { name = "librosa", marker = "sys_platform == 'linux'" },
+    { name = "numpy", marker = "sys_platform == 'linux'" },
+    { name = "pretty-midi", marker = "sys_platform == 'linux'" },
+    { name = "torch", marker = "sys_platform == 'linux'" },
+]
+
+[[package]]
 name = "ai-edge-litert"
 version = "2.1.2"
 source = { registry = "https://pypi.org/simple" }
@@ -2646,6 +2657,7 @@ source = { editable = "." }
 dependencies = [
     { name = "accelerate", marker = "sys_platform == 'linux'" },
     { name = "ace-step", marker = "sys_platform == 'linux'" },
+    { name = "adtof-pytorch", marker = "sys_platform == 'linux'" },
     { name = "ai-edge-litert", marker = "sys_platform == 'linux'" },
     { name = "audio-separator", marker = "sys_platform == 'linux'" },
     { name = "bs-roformer", marker = "sys_platform == 'linux'" },
@@ -2717,6 +2729,7 @@ dev = [
 requires-dist = [
     { name = "accelerate", specifier = ">=0.30.0" },
     { name = "ace-step", editable = "Ace-Step-Wrangler/vendor/ACE-Step-1.5" },
+    { name = "adtof-pytorch", git = "https://github.com/xavriley/ADTOF-pytorch?rev=85c192e" },
     { name = "ai-edge-litert", specifier = ">=1.1.0" },
     { name = "audio-separator", directory = "vendor/python-audio-separator" },
     { name = "bs-roformer", specifier = ">=0.3.2" },
