@@ -13,8 +13,9 @@ has to import ``basic_pitch.inference`` directly.
 GPU / CPU note
 --------------
 BasicPitch runs on CPU only (the loader sets ``CUDA_VISIBLE_DEVICES=-1``
-before TF is imported via ``BasicPitchModelLoader``).  The MIDI pipeline
-is therefore purely CPU-bound; Demucs/MusicGen GPU memory is unaffected.
+before TF is imported via ``BasicPitchModelLoader``).  The ADTOF drum
+model uses the best available torch device and is evicted by the pipeline
+after drum stems are processed, so GPU memory is only held transiently.
 """
 
 import pathlib
@@ -32,11 +33,13 @@ log = logging.getLogger("stemforge.models.midi_loader")
 class MidiModelLoader:
     """Facade that converts audio files to MIDI note events.
 
-    Exposes two conversion paths:
+    Exposes three conversion paths:
 
     * :meth:`convert_audio_to_midi` — uses BasicPitch (good for instruments).
     * :meth:`convert_vocal_to_midi` — uses faster-whisper for word timing
       and librosa PYIN for pitch estimation (better for sung vocals).
+    * :meth:`convert_drum_to_midi` — uses ADTOF for percussion (BasicPitch
+      is a pitched-instrument model and garbles unpitched drums).
 
     Lifecycle mirrors all other StemForge loaders::
 
@@ -53,6 +56,7 @@ class MidiModelLoader:
     def __init__(self) -> None:
         self._bp_loader = BasicPitchModelLoader()
         self._model: Any | None = None          # BasicPitch TF model
+        self._adtof: Any | None = None          # AdtofModelLoader (lazy)
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -90,10 +94,17 @@ class MidiModelLoader:
         return self._model is not None
 
     def evict(self) -> None:
-        """Release both models from memory and trigger GC."""
+        """Release all models from memory and trigger GC."""
         self._bp_loader.evict()
         self._model = None
+        self.evict_drum_model()
         log.debug("MidiModelLoader: models evicted.")
+
+    def evict_drum_model(self) -> None:
+        """Release only the ADTOF drum model, leaving BasicPitch intact."""
+        if self._adtof is not None:
+            self._adtof.evict()
+            self._adtof = None
 
     # ------------------------------------------------------------------
     # High-level conversion
@@ -347,3 +358,50 @@ class MidiModelLoader:
             path.name, len(events), len(lyrics), len(segments),
         )
         return events, lyrics
+
+    def convert_drum_to_midi(
+        self,
+        path: pathlib.Path,
+        *,
+        duration: float = 0.0,
+    ) -> list[NoteEvent]:
+        """Transcribe a drum stem to GM percussion note events via ADTOF.
+
+        The ADTOF model is lazy-loaded on first use and cached until
+        :meth:`evict` or :meth:`evict_drum_model` is called.
+
+        Parameters
+        ----------
+        path:
+            Drum audio file.  Any sample rate; resampled internally.
+        duration:
+            If positive, clip note events to ``[0, duration)`` seconds.
+
+        Returns
+        -------
+        list[NoteEvent]
+            ``(start_sec, end_sec, gm_note, velocity)`` tuples sorted by
+            start time, for a channel-10 (``is_drum``) instrument.
+
+        Raises
+        ------
+        :class:`~utils.errors.ModelLoadError`
+            If the ADTOF model cannot be loaded.
+        :class:`~utils.errors.PipelineExecutionError`
+            If drum transcription fails.
+        """
+        if self._adtof is None:
+            from models.adtof_loader import AdtofModelLoader
+            self._adtof = AdtofModelLoader()
+
+        events = self._adtof.predict(path)
+
+        if duration > 0.0:
+            events = [
+                (s, min(e, duration), p, v)
+                for s, e, p, v in events
+                if s < duration
+            ]
+
+        log.debug("convert_drum_to_midi: %s → %d drum events", path.name, len(events))
+        return events

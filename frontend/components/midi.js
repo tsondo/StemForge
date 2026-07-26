@@ -55,6 +55,9 @@ export function initMidi() {
     el('div', { className: 'checkbox-group', id: 'midi-stems' },
       el('span', { className: 'text-dim' }, 'Run separation first'),
     ),
+    el('div', { className: 'text-dim hidden', id: 'midi-drum-hint' },
+      'Drum stems use ADTOF drum transcription (kick, snare, tom, hi-hat, cymbal → GM drum kit).',
+    ),
   );
 
   const keyGroup = el('div', { className: 'form-group' },
@@ -289,6 +292,9 @@ export function initMidi() {
   });
   document.getElementById('midi-start').addEventListener('click', startExtraction);
 
+  // Show the drum transcription hint whenever a drum stem is checked
+  document.getElementById('midi-stems').addEventListener('change', syncDrumHint);
+
   // Import MIDI file
   document.getElementById('midi-import').addEventListener('click', () => {
     document.getElementById('midi-import-input').click();
@@ -402,6 +408,13 @@ function populateStemCheckboxes(stemPaths) {
       ),
     );
   }
+  syncDrumHint();
+}
+
+function syncDrumHint() {
+  const checked = document.querySelectorAll('#midi-stems input[type="checkbox"]:checked');
+  const hasDrum = Array.from(checked).some(cb => isDrumStem(cb.value));
+  document.getElementById('midi-drum-hint').classList.toggle('hidden', !hasDrum);
 }
 
 async function startExtraction() {

@@ -91,7 +91,7 @@ def capabilities() -> dict:
 def list_models() -> dict:
     from models.registry import (
         list_specs, DemucsSpec, RoformerSpec, BasicPitchSpec,
-        WhisperSpec, StableAudioSpec,
+        DrumMidiSpec, WhisperSpec, StableAudioSpec,
     )
 
     def _serialize(spec) -> dict:
@@ -111,6 +111,7 @@ def list_models() -> dict:
         "demucs": [_serialize(s) for s in list_specs(DemucsSpec)],
         "roformer": [_serialize(s) for s in list_specs(RoformerSpec)],
         "basicpitch": [_serialize(s) for s in list_specs(BasicPitchSpec)],
+        "drum_midi": [_serialize(s) for s in list_specs(DrumMidiSpec)],
         "whisper": [_serialize(s) for s in list_specs(WhisperSpec)],
         "stable_audio": [_serialize(s) for s in list_specs(StableAudioSpec)],
     }

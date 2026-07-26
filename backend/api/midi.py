@@ -14,6 +14,7 @@ from pydantic import BaseModel
 from backend.services.job_manager import job_manager
 from backend.services.session_store import SessionStore, TrackState, get_user_session
 from backend.services import pipeline_manager
+from utils.midi_io import DRUM_STEM_LABELS
 from utils.paths import MIDI_DIR
 
 router = APIRouter(prefix="/api/midi", tags=["midi"])
@@ -81,10 +82,7 @@ STEM_DEFAULT_PROGRAM: dict[str, int] = {
     "other": 48,        # String Ensemble 1
 }
 
-STEM_IS_DRUM: dict[str, bool] = {
-    "drums": True,
-    "Drums & percussion": True,
-}
+STEM_IS_DRUM: dict[str, bool] = dict.fromkeys(DRUM_STEM_LABELS, True)
 
 # ─── SoundFont discovery & state ─────────────────────────────────────────
 
