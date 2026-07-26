@@ -5,6 +5,7 @@ Shared between run.py (configures launch params) and the compose router
 """
 
 import os
+import socket
 import subprocess
 import sys
 import threading
@@ -65,6 +66,7 @@ _PASSTHROUGH_VARS = [
     "ACESTEP_VAE_ON_CPU",
     "ACESTEP_LM_BACKEND",
     "ACESTEP_INIT_LLM",
+    "ACESTEP_NO_INIT",
     "MODEL_LOCATION",
 ]
 
@@ -125,6 +127,27 @@ def launch() -> bool:
 
         _state["status"] = "starting"
 
+    # Fail fast if something already holds the port (e.g. an orphaned AceStep
+    # from a previous session — launch() detaches the subprocess with
+    # start_new_session=True, so a hard kill of run.py can leave it alive).
+    # Without this check the subprocess starts, dies on bind, and reports a
+    # generic "crashed (exit code 1)".
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe.settimeout(1.0)
+    try:
+        port_in_use = probe.connect_ex(("127.0.0.1", port)) == 0
+    finally:
+        probe.close()
+    if port_in_use:
+        msg = (
+            f"Port {port} is already in use — likely a stale AceStep process "
+            f"from a previous session. Kill it (e.g. `fuser -k {port}/tcp`) "
+            f"or restart with a different --acestep-port."
+        )
+        set_status("crashed", exit_code=None, error=msg)
+        print(f"[stemforge] {msg}")
+        return False
+
     # Build environment
     env = os.environ.copy()
     if gpu:
@@ -137,6 +160,12 @@ def launch() -> bool:
     # allowing other pipelines (Synth, Separate, etc.) to use the GPU.
     # See memory/project_acestep_vram_workaround.md for context.
     env.setdefault("MAX_CUDA_VRAM", "16")
+
+    # Load models at startup. Upstream AceStep defaults to lazy loading
+    # (ACESTEP_NO_INIT=true), but _monitor() gates status "running" on
+    # /health reporting models_initialized — which never happens under lazy
+    # loading because compose endpoints reject requests until "running".
+    env.setdefault("ACESTEP_NO_INIT", "false")
 
     # Preamble sets process-wide torch config without touching vendor code.
     preamble = (
