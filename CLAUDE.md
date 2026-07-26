@@ -49,7 +49,7 @@ All pipelines and the full web UI are implemented:
 - Upload supports audio (WAV, FLAC, MP3, OGG, AIFF) and video (MP4, MKV, WEBM, AVI, MOV) — video audio extracted via FFmpeg
 - Export panel — all pipeline outputs, 4 audio formats (wav/flac/mp3/ogg), zip download
 - Waveform visualization via wavesurfer.js with global transport bar
-- Deterministic uv environment, Python 3.11, CUDA 13.0 wheels
+- Deterministic uv environment, Python 3.12, CUDA 13.0 wheels
 - macOS support via MPS acceleration (separate `pyproject.toml.MAC`)
 
 ---
@@ -395,7 +395,7 @@ AceStep runs as a separate process managed by `run.py`:
 
 ## Platform notes
 
-- **Linux (primary)**: CUDA 13.0 wheels, uv sync, Python 3.11
+- **Linux (primary)**: CUDA 13.0 wheels, uv sync, Python 3.12
 - **macOS (Apple Silicon)**: MPS acceleration via `pyproject.toml.MAC`; use `from utils.device import get_device`, never hardcode `"cuda"`
 - **FluidSynth**: Required for MIDI preview and Mix tab; GM soundfont auto-discovered
 

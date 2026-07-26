@@ -1,3 +1,17 @@
+# =============================================================================
+# pyproject.toml.ROCM — AMD GPU (ROCm) variant.  UNTESTED on real hardware.
+#
+# Usage: cp pyproject.toml.ROCM pyproject.toml && uv sync
+# Requires a working ROCm 7.1 runtime (https://rocm.docs.amd.com).
+#
+# Differences from the CUDA pyproject:
+#   - torch/torchaudio/torchvision come from the rocm7.1 wheel index
+#   - nvidia-cuda-runtime-cu12 removed (CUDA-only)
+#   - flash-attn is CUDA-only and already excluded by its wheel marker;
+#     the AceStep LM backend auto-falls back to SDPA attention
+#   - faster-whisper (ctranslate2) and UVR enhance (onnxruntime) run on CPU
+# =============================================================================
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -36,13 +50,15 @@ classifiers = [
 # Runtime dependencies — REAL, VERIFIED, EXECUTION-READY
 # ---------------------------------------------------------------------------
 dependencies = [
-    # Core PyTorch stack — CUDA 13.0 wheels via pytorch-cu130 index below.
+    # Core PyTorch stack — ROCm 7.1 wheels via pytorch-rocm index below.
     "torch==2.10.0",
     "torchaudio==2.10.0",
+    # torch+rocm requires triton-rocm, which exists only on the rocm index;
+    # declared directly so the tool.uv.sources index pin applies to it.
+    "triton-rocm",
 
     # GitHub-pinned ML components (renamed distributions)
     "demucs @ git+https://github.com/facebookresearch/demucs.git@v4.0.1",
-    "adtof-pytorch @ git+https://github.com/xavriley/ADTOF-pytorch@85c192e",
     #"basic-pitch @ git+https://github.com/spotify/basic-pitch.git",    
 
     # Demucs deps
@@ -101,9 +117,6 @@ dependencies = [
     "ace-step",
     "nano-vllm",
     "torchvision",
-
-    # flash_attn (via nano-vllm) is compiled for CUDA 12 — provide compat runtime
-    "nvidia-cuda-runtime-cu12",
 
     # RVC voice conversion (vendor/rvc)
     "faiss-cpu>=1.9.0",
@@ -164,21 +177,22 @@ stemforge = "run:main"
 #----------------------------------------------------------------------------
 # Tool hints ----------------------------------------------------------------
 [tool.uv]
-environments = ["python_version == '3.12' and sys_platform == 'linux'"]
-# Override ace-step's cu128-pinned torch packages to use our cu130 index
+environments = ["python_version == '3.12' and sys_platform == 'linux' and platform_machine == 'x86_64'"]
+# Override ace-step's cu128-pinned torch packages to use the rocm index
 override-dependencies = [
     "torch==2.10.0",
     "torchaudio==2.10.0",
     "torchvision==0.25.0",
 ]
 [[tool.uv.index]]
-name = "pytorch-cu130"
-url = "https://download.pytorch.org/whl/cu130"
+name = "pytorch-rocm"
+url = "https://download.pytorch.org/whl/rocm7.1"
 explicit = true
 [tool.uv.sources]
-torch = { index = "pytorch-cu130" }
-torchaudio = { index = "pytorch-cu130" }
-torchvision = { index = "pytorch-cu130" }
+torch = { index = "pytorch-rocm" }
+torchaudio = { index = "pytorch-rocm" }
+torchvision = { index = "pytorch-rocm" }
+triton-rocm = { index = "pytorch-rocm" }
 ace-step = { path = "Ace-Step-Wrangler/vendor/ACE-Step-1.5", editable = true }
 nano-vllm = { path = "Ace-Step-Wrangler/vendor/ACE-Step-1.5/acestep/third_parts/nano-vllm" }
 audio-separator = { path = "vendor/python-audio-separator" }
