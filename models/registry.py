@@ -482,6 +482,12 @@ ADTOF_DRUMS = _register(DrumMidiSpec(
     capabilities=frozenset({"transcribe", "gpu_acceleration"}),
     cache_subdir="adtof",
     description="Automatic drum transcription — kick, snare, tom, hi-hat, cymbal on GM channel 10.",
+    license_warning=(
+        "The ADTOF drum model weights are CC BY-NC-SA 4.0 — non-commercial "
+        "use only — and the adtof-pytorch port code ships no license "
+        "(all rights reserved). Drum MIDI extracted with this model may "
+        "not be used commercially. See THIRD-PARTY-NOTICES.md."
+    ),
     preprocessing="Mono downmix; resample to 44 100 Hz internally; log-frequency spectrogram.",
     postprocessing="Per-class peak picking; GM percussion note mapping; 60 ms note duration.",
     class_labels=("kick", "snare", "tom", "hi_hat", "cymbal"),

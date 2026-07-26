@@ -16,6 +16,10 @@ let gmPrograms = [];
 let stemDefaults = {};
 let drumStems = {};
 
+/** ADTOF license warning text (from /api/models) and session acknowledgment. */
+let drumLicenseWarning = '';
+let drumLicenseAcknowledged = false;
+
 /** LilyPond availability (checked on init). */
 let _lilypondAvailable = false;
 
@@ -335,6 +339,11 @@ async function loadGmPrograms() {
     stemDefaults = data.defaults || {};
     drumStems = data.drum_stems || {};
   } catch { /* fail silently, will use defaults */ }
+  try {
+    const models = await api('/models');
+    drumLicenseWarning = models.drum_midi?.[0]?.license_warning || '';
+    syncDrumHint();
+  } catch { /* no warning shown if models endpoint fails */ }
 }
 
 async function loadCurrentSoundfont() {
@@ -415,12 +424,52 @@ function syncDrumHint() {
   const checked = document.querySelectorAll('#midi-stems input[type="checkbox"]:checked');
   const hasDrum = Array.from(checked).some(cb => isDrumStem(cb.value));
   document.getElementById('midi-drum-hint').classList.toggle('hidden', !hasDrum);
+  syncDrumLicenseBanner(hasDrum);
+}
+
+/** Show the ADTOF license warning banner when a drum stem is checked. */
+function syncDrumLicenseBanner(hasDrum) {
+  const existing = document.getElementById('midi-drum-license');
+  if (existing) existing.remove();
+  if (!hasDrum || !drumLicenseWarning) return;
+
+  const hint = document.getElementById('midi-drum-hint');
+
+  // Already acknowledged this session — show a brief reminder only
+  if (drumLicenseAcknowledged) {
+    hint.after(el('div', {
+      className: 'banner banner-warn', id: 'midi-drum-license',
+    }, 'License warning acknowledged. Drum transcription weights are non-commercial (CC BY-NC-SA 4.0).'));
+    return;
+  }
+
+  const ackBtn = el('button', { className: 'btn btn-sm' }, 'I understand — proceed');
+  const banner = el('div', {
+    className: 'banner banner-warn', id: 'midi-drum-license',
+  },
+    el('strong', {}, 'License warning: '),
+    drumLicenseWarning,
+    el('div', { style: 'margin-top: 0.5rem' }, ackBtn),
+  );
+  ackBtn.addEventListener('click', () => {
+    drumLicenseAcknowledged = true;
+    syncDrumHint();
+  });
+  hint.after(banner);
+}
+
+/** Returns true if a drum stem is checked but the license is unacknowledged. */
+function isDrumLicenseBlocked() {
+  const checked = document.querySelectorAll('#midi-stems input[type="checkbox"]:checked');
+  const hasDrum = Array.from(checked).some(cb => isDrumStem(cb.value));
+  return hasDrum && !!drumLicenseWarning && !drumLicenseAcknowledged;
 }
 
 async function startExtraction() {
   const stemEls = document.querySelectorAll('#midi-stems input[type="checkbox"]:checked');
   const stems = Array.from(stemEls).map(e => e.value);
   if (!stems.length) return;
+  if (isDrumLicenseBlocked()) return;  // banner above the stem list explains
 
   const progressCard = document.getElementById('midi-progress');
   const resultsContainer = document.getElementById('midi-results');
