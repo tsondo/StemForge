@@ -110,7 +110,7 @@ dependencies = [
     # Web backend
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
-    "python-multipart>=0.0.9",
+    "python-multipart>=0.0.31",
     "httpx>=0.28.1",
 
     # ACE-Step music generation (resolved via [tool.uv.sources])
