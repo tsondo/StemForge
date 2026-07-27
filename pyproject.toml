@@ -170,6 +170,11 @@ override-dependencies = [
     "torch==2.10.0",
     "torchaudio==2.10.0",
     "torchvision==0.25.0",
+    # Exclude gradio entirely: only AceStep's standalone web UI (acestep/ui/,
+    # never launched — we run acestep.api_server, patched headless in our
+    # ACE-Step-1.5 fork) and qwen-asr's demo CLI use it. Its ==6.2.0 pin
+    # capped starlette <1.0 and carried 6 open security advisories.
+    "gradio; sys_platform == 'never'",
 ]
 [[tool.uv.index]]
 name = "pytorch-cu130"
