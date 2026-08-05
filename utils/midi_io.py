@@ -193,6 +193,37 @@ def quantise_notes(
     return result
 
 
+def flatten_to_format0(path: pathlib.Path) -> pathlib.Path:
+    """Rewrite the Standard MIDI File at *path* in place as format 0.
+
+    Merges all tracks into a single track (channel assignments are preserved
+    in the events, so drums stay on channel 10).  Some hardware arrangers and
+    keyboards only accept single-track format-0 files.
+
+    Parameters
+    ----------
+    path:
+        Path to an existing ``.mid`` file (format 0 or 1).
+
+    Returns
+    -------
+    pathlib.Path
+        The same *path*, now containing a format-0 file.
+    """
+    import mido
+
+    path = pathlib.Path(path)
+    mid = mido.MidiFile(str(path))
+    if mid.type == 0:
+        return path
+    merged = mido.merge_tracks(mid.tracks)
+    out = mido.MidiFile(type=0, ticks_per_beat=mid.ticks_per_beat)
+    out.tracks.append(merged)
+    out.save(str(path))
+    log.debug("flatten_to_format0: %s (%d tracks merged)", path.name, len(mid.tracks))
+    return path
+
+
 # ---------------------------------------------------------------------------
 # Key / scale helpers
 # ---------------------------------------------------------------------------

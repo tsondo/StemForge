@@ -106,6 +106,16 @@ export function initExport() {
     el('label', {}, 'Depth: ', bitDepthSelect),
   );
 
+  // MIDI SMF format — shown only when MIDI artifacts are available.  Format 0
+  // (single-track) is required by some hardware arrangers/keyboards.
+  const midiFormatSelect = el('select', { id: 'export-midi-format' },
+    el('option', { value: '1' }, 'Format 1 (multi-track)'),
+    el('option', { value: '0' }, 'Format 0 (single-track)'),
+  );
+  const midiFormatGroup = el('span', { className: 'export-lossless-inline hidden', id: 'export-midi-format-group' },
+    el('label', {}, 'MIDI: ', midiFormatSelect),
+  );
+
   const exportBtn = el('button', { className: 'btn btn-primary', id: 'export-start', disabled: 'true' }, 'Export Selected');
 
   const topBar = el('div', { className: 'export-top-bar' },
@@ -113,6 +123,7 @@ export function initExport() {
     el('label', {}, 'Rate: ', sampleRateSelect),
     bitrateGroup,
     bitDepthGroup,
+    midiFormatGroup,
     exportBtn,
   );
 
@@ -233,14 +244,24 @@ function refreshPreviews() {
 
   document.getElementById('export-start').disabled = false;
 
-  for (const item of items) {
-    const checkbox = el('input', { type: 'checkbox', checked: 'true', 'data-path': item.path });
+  // MIDI format selector only matters when MIDI artifacts exist
+  document.getElementById('export-midi-format-group')
+    .classList.toggle('hidden', !items.some(i => i.type === 'midi'));
 
-    // Lyrics outputs (.txt/.lrc/.srt) are non-audio \u2014 render a simple row
-    // with a checkbox + label so they can be selected for export, but skip
-    // the waveform/playback chrome that only makes sense for audio.
-    if (item.type === 'lyrics') {
-      const ext = (item.path.split('.').pop() || '').toLowerCase();
+  for (const item of items) {
+    // MIDI artifacts live in the session (no file path until export time);
+    // the checkbox carries the stem label instead of a path.
+    const checkbox = item.type === 'midi'
+      ? el('input', { type: 'checkbox', checked: 'true', 'data-midi-label': item.midiLabel })
+      : el('input', { type: 'checkbox', checked: 'true', 'data-path': item.path });
+
+    // Lyrics (.txt/.lrc/.srt) and MIDI outputs are non-audio \u2014 render a
+    // simple row with a checkbox + label so they can be selected for export,
+    // but skip the waveform/playback chrome that only makes sense for audio.
+    if (item.type === 'lyrics' || item.type === 'midi') {
+      const ext = item.type === 'midi'
+        ? 'mid'
+        : (item.path.split('.').pop() || '').toLowerCase();
       const header = el('div', { className: 'stem-card-header' },
         el('label', { className: 'export-check-label' }, checkbox,
           el('span', { className: 'stem-label' }, `${item.label}  `,
@@ -328,6 +349,15 @@ function collectArtifacts() {
     items.push({ label, path, type: 'stem' });
   }
 
+  // MIDI extractions — held in the session until saved; resolved to file
+  // paths at export time via /api/midi/save (see startExport).
+  if (appState.midiHasMerged) {
+    items.push({ label: 'Merged MIDI (all tracks)', type: 'midi', midiLabel: 'merged' });
+  }
+  for (const label of appState.midiLabels || []) {
+    items.push({ label: `${label} MIDI`, type: 'midi', midiLabel: label });
+  }
+
   // Generated audio (Synth tab)
   if (appState.musicgenPath) {
     items.push({ label: 'Generated', path: appState.musicgenPath, type: 'generated' });
@@ -377,10 +407,33 @@ function collectArtifacts() {
 
 async function startExport() {
   const checkedEls = document.querySelectorAll('#export-previews input[type="checkbox"]:checked');
-  const items = Array.from(checkedEls).map(cb => cb.dataset.path);
+  const items = [];
+  const midiLabels = [];
+  for (const cb of checkedEls) {
+    if (cb.dataset.midiLabel) midiLabels.push(cb.dataset.midiLabel);
+    else if (cb.dataset.path) items.push(cb.dataset.path);
+  }
   const format = document.getElementById('export-format').value;
 
-  if (!items.length) return;
+  if (!items.length && !midiLabels.length) return;
+
+  // Materialize selected MIDI artifacts to disk first (they live in the
+  // session until saved), honoring the chosen SMF format.
+  if (midiLabels.length) {
+    const smfFormat = parseInt(document.getElementById('export-midi-format').value, 10);
+    for (const label of midiLabels) {
+      try {
+        const res = await api('/midi/save', {
+          method: 'POST',
+          body: JSON.stringify({ label, smf_format: smfFormat }),
+        });
+        items.push(res.path);
+      } catch (err) {
+        alert(`MIDI save failed for ${label}: ${err.message}`);
+        return;
+      }
+    }
+  }
 
   const body = { items, format };
   const sr = document.getElementById('export-sample-rate').value;

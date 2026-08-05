@@ -127,6 +127,7 @@ class RenderRequest(BaseModel):
 
 class SaveRequest(BaseModel):
     label: str = "merged"    # "merged" or a stem label
+    smf_format: int = 1      # 1 = multi-track, 0 = single-track (hardware arrangers)
 
 
 def _run_midi_extraction(
@@ -263,6 +264,8 @@ def render_midi_to_audio(req: RenderRequest, session: SessionStore = Depends(get
 
 @router.post("/save")
 def save_midi(req: SaveRequest, session: SessionStore = Depends(get_user_session)) -> dict:
+    if req.smf_format not in (0, 1):
+        raise HTTPException(422, f"Unsupported SMF format: {req.smf_format}")
     MIDI_DIR.mkdir(parents=True, exist_ok=True)
 
     if req.label == "merged":
@@ -277,8 +280,10 @@ def save_midi(req: SaveRequest, session: SessionStore = Depends(get_user_session
         midi_data = stem_midi[req.label]
         out_path = MIDI_DIR / f"{req.label}.mid"
 
-    from utils.midi_io import write_midi
+    from utils.midi_io import write_midi, flatten_to_format0
     write_midi(midi_data, out_path)
+    if req.smf_format == 0:
+        flatten_to_format0(out_path)
     return {"path": str(out_path)}
 
 

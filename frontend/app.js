@@ -24,6 +24,7 @@ export const appState = {
   audioInfo: null,
   stemPaths: {},
   midiLabels: [],
+  midiHasMerged: false,
   musicgenPath: null,
   mixPath: null,
   composePaths: [],

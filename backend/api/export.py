@@ -51,10 +51,10 @@ def _run_export(
         if not src.exists():
             continue
 
-        # Lyrics transcription outputs (.txt/.lrc/.srt) are plain text — copy
-        # them verbatim into the export dir, bypassing audio transcoding.  The
-        # selected audio format does not apply to non-audio artifacts.
-        if src.suffix.lower() in {".txt", ".lrc", ".srt"}:
+        # Non-audio artifacts — lyrics text (.txt/.lrc/.srt) and MIDI files
+        # (.mid/.midi) — are copied verbatim into the export dir, bypassing
+        # audio transcoding.  The selected audio format does not apply.
+        if src.suffix.lower() in {".txt", ".lrc", ".srt", ".mid", ".midi"}:
             import shutil
             dest = export_out / src.name
             shutil.copy2(src, dest)

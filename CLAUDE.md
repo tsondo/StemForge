@@ -48,7 +48,7 @@ All pipelines and the full web UI are implemented:
 - AceStep LoRA training (Compose tab Train mode) — upload audio, scan/label/preprocess pipeline, LoRA/LoKR fine-tuning with loss chart, snapshot management, adapter export
 - Batch separation — multi-file upload, single-stem extraction across all files, Save All zip download
 - Upload supports audio (WAV, FLAC, MP3, OGG, AIFF) and video (MP4, MKV, WEBM, AVI, MOV) — video audio extracted via FFmpeg
-- Export panel — all pipeline outputs, 4 audio formats (wav/flac/mp3/ogg), zip download
+- Export panel — all pipeline outputs, 6 audio formats (wav/flac/aiff/mp3/ogg/m4a), MIDI export (per-stem + merged multi-track, SMF format 0 or 1 for hardware arrangers), zip download
 - Waveform visualization via wavesurfer.js with global transport bar
 - Deterministic uv environment, Python 3.12, CUDA 13.0 wheels
 - macOS support via MPS acceleration (separate `pyproject.toml.MAC`)

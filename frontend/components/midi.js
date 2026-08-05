@@ -541,6 +541,7 @@ async function handleMidiImport() {
 
     // Build a result card for the imported MIDI
     buildMidiCard(data.label, { note_count: data.note_count });
+    if (!appState.midiLabels.includes(data.label)) appState.midiLabels.push(data.label);
     appState.emit('midiReady', { labels: [data.label], stem_info: { [data.label]: { note_count: data.note_count } } });
   } catch (err) {
     alert(`MIDI import failed: ${err.message}`);
@@ -555,6 +556,7 @@ function showMidiResults(result) {
   midiPlayers.length = 0;
 
   appState.midiLabels = result.labels || [];
+  appState.midiHasMerged = !!result.has_merged;
   appState.emit('midiReady', result);
 
   // Merged MIDI buttons
