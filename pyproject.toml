@@ -57,7 +57,7 @@ dependencies = [
     "pretty_midi==0.2.11",
     "mir_eval==0.8.2",
     "resampy>=0.4.0",
-    "setuptools>=70.0.0,<72",
+    "setuptools>=78.1.1,<82",
     "ai-edge-litert>=1.1.0",
 
 
