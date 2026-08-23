@@ -1,16 +1,30 @@
-# Web MIDI Output — Technical Specification (rev. 2)
+# Web MIDI Output — Technical Specification (rev. 3)
 
 **Feature:** Play extracted MIDI stems directly to external hardware synthesizers
 **Location:** MIDI tab — per-stem card controls + a global MIDI Out panel in the left column
 **Dependencies:** None. Web MIDI API is a W3C browser API; no Python or JS packages added.
 
-> **Revision 2.** Supersedes the initial draft. Substantive changes:
-> two-phase Stop (the queued-window hole), Web Worker clock (background-tab
-> throttling), disconnect-scoped port-change handling, explicit multi-track
-> merge rules, overlap merging in the backend flattener, velocity clamp scoped
-> to note-ons, truncation-by-notes invariant, Program Change suppression keyed
-> off drum-stem status, and reuse of the existing `_resolve_midi` helper.
-> Each change is marked **[rev2]** where it matters.
+> **Revision 3.** Written after hardware validation of rev. 2. **Reverses two
+> rev. 2 decisions** on the strength of what the built feature actually felt
+> like to use:
+>
+> 1. **One transport, not two.** Rev. 2 kept the FluidSynth preview and the
+>    hardware scheduler deliberately independent, with separate Play and Send
+>    buttons. In practice pressing both produced simultaneous soft-synth and
+>    hardware output, which is never what anyone wants. The card now has a
+>    **single** transport button whose destination is whatever the routing
+>    dropdown says.
+> 2. **The waveform follows hardware playback.** Rev. 2 said do not sync them.
+>    In practice a frozen cursor and a dead click-to-seek made Send feel
+>    broken. The waveform now tracks hardware playback and seeks it.
+>
+> Consequently **seek is no longer deferred** — `play()` regains the
+> `startSec` argument that rev. 2 dropped, with the skip rule defined below.
+> The routing dropdown's first entry is renamed **"None" → "SoftSynth"**,
+> because that option was never "no output": it routes to FluidSynth.
+>
+> Everything else in rev. 2 stands. Changes are marked **[rev3]**; rev. 2
+> markers are left in place where that reasoning still holds.
 
 ---
 
@@ -41,19 +55,31 @@ explicitly out of scope and deferred — see *Deferred* at the end.
 ```
 Separate → MIDI → [Extract] → per-stem cards appear
                                   │
-                                  ├─ Instrument: [Electric Bass ▼]   ← existing, FluidSynth only
-                                  ├─ [▶ Play] [■ Stop]               ← existing, FluidSynth preview
+                                  ├─ Instrument: [Electric Bass ▼]   ← existing, affects SoftSynth
+                                  ├─ [▶ Play] [■ Stop] [⏪ Rewind]    ← [rev3] label follows routing
                                   │
-                                  └─ MIDI Out: [Port ▼] [Ch 1 ▼] [▶ Send] [■ Stop]   ← NEW
+                                  └─ MIDI Out: [SoftSynth ▼] [Ch 1 ▼] [☐ Send Program Change]
 ```
+
+**[rev3] One transport per card.** The routing dropdown decides where the
+card's existing transport sends audio:
+
+- **SoftSynth** (default) — the FluidSynth render plays through the browser,
+  exactly as before. The button reads **▶ Play**.
+- **Any hardware port** — the button reads **▶ Send** and drives that port.
+  The FluidSynth audio is muted; the waveform still scrolls and still seeks
+  (see *Waveform sync* below).
+
+There is no way to run both at once, which is the entire point of the change.
+Switching the dropdown back to SoftSynth restores browser preview.
 
 Left column gains a **MIDI Out** section: an availability banner, a
 *Request access* button (see below), and a **Panic** button that silences every
 known port regardless of which card is playing.
 
-Typical session: Julio extracts bass and "other" from a track, sets bass →
-wavestate ch 1, other → modwave ch 1, and hits Send on each. Hardware plays;
-StemForge's own FluidSynth preview stays available and independent.
+Typical session: Julio extracts bass and "other" from a track, routes bass →
+wavestate ch 1 and other → modwave ch 1, then presses Send on each. Both play
+on hardware simultaneously; each card's waveform tracks its own playback.
 
 Imported MIDI (`POST /api/midi/import`) lands in `stem_midi_data` and gets a
 card like any extracted stem, so it gets MIDI Out for free — no extra work, but
@@ -199,11 +225,12 @@ export function panicAll()           // silence every known output
 
 ```js
 {
-  play(events),   // begin streaming a flat, sorted event array from t=0
-  stop(),         // two-phase halt — see Stop below
+  play(events, opts),  // stream a flat, sorted event array; opts.startSec, opts.program
+  stop(),              // two-phase halt — see Stop below
   isPlaying(),
   onFinish(cb),
-  onTick(cb),     // fires with current playback seconds
+  onTick(cb),          // fires with current playback seconds
+  onError(cb),
 }
 ```
 
@@ -211,6 +238,33 @@ export function panicAll()           // silence every known output
 port) dropdown during playback has no effect until the next Send — the UI does
 not need to react, and the spec says so to keep the implementer from inventing
 live-rebind behaviour.
+
+### [rev3] `startSec` — seek, with the skip rule
+
+Rev. 2 dropped `startSec` because nothing in the UI seeked. Click-to-seek on
+the waveform now does, so it returns — with the rule rev. 2 said it would need:
+
+> **A note already sounding at the seek point is skipped.** Only notes whose
+> `start` is at or after `startSec` are played.
+
+Concretely, `play(events, {startSec})`:
+
+1. Sets `originMs = performance.now() + LEAD_MS - startSec * 1000`, so the
+   existing `originMs + e.t * 1000` arithmetic keeps working untouched.
+2. Advances the cursor past every event with `t < startSec`.
+3. **Drops any `off` whose matching `on` was skipped.** This is the whole
+   subtlety: a note spanning the seek point contributes only an `off` to the
+   remaining stream, and sending a bare note-off is harmless on most gear but
+   will cut a note the *user* is holding on the keyboard. Track pitches whose
+   `on` was consumed during the skip and suppress their `off`.
+
+Rationale for skipping rather than starting the note mid-flight: firing a
+truncated note means a fresh attack partway through the envelope, which is
+right for a sustained pad and clearly wrong for anything plucked or
+percussive. Silence until the next note is predictable on every patch, and it
+is what hardware sequencers generally do.
+
+`startSec` beyond the last event is legal and finishes immediately.
 
 **[rev2]** The initial draft's `startSec` parameter is dropped. Nothing in the
 UI seeks; a start-from-playhead feature can reintroduce it alongside the rule
@@ -375,23 +429,32 @@ button would be a no-op. The button's real job is re-invoking
 `requestMIDIAccess()` after a denial (or before first grant). Name it for what
 it does; hide it once access is granted.
 
-**Per-card — new MIDI Out row** in `buildMidiCard()`, inserted between
+**Per-card — MIDI Out row** in `buildMidiCard()`, inserted between
 `instrumentRow` and `waveContainer`:
 
 ```js
 const midiOutRow = el('div', { className: 'midi-out-row' },
   el('label', { className: 'text-dim' }, 'MIDI Out:'),
-  portSelect,       // "None" + one option per output
+  portSelect,       // [rev3] "SoftSynth" + one option per output
   channelSelect,    // 1–16
-  sendBtn,          // "▶ Send"
-  outStopBtn,       // "■ Stop"
   progChangeLabel,  // checkbox "Send Program Change" — UNCHECKED by default
-  outStatus,        // "Playing 0:42 / 3:07" or error text
+  outStatus,        // error text / "truncated" notice
 );
 ```
 
+**[rev3] The row carries no transport buttons.** Send and Stop are gone; the
+card's existing Play/Stop/Rewind drive whichever destination `portSelect`
+names. `channelSelect` and `progChangeLabel` are disabled while SoftSynth is
+selected, since neither means anything for the FluidSynth render.
+
 The row is hidden entirely when `!isSupported()` — a dead control is worse
-than no control.
+than no control. **[rev3]** When Web MIDI is unavailable the card behaves
+exactly as it did before this feature existed: Play, FluidSynth, done.
+
+**[rev3] "SoftSynth", not "None".** The first dropdown entry routes to
+FluidSynth, which is a real destination. Calling it "None" implied the card
+was muted and made the two-button design look necessary. Naming the
+destination is what makes one transport button obviously correct.
 
 **Exclusivity.** Module-level `const _outSchedulers = []`, mirroring the
 existing `midiPlayers` / `stopOtherPlayers` convention. Starting a card's Send
@@ -399,11 +462,35 @@ stops any other scheduler *on the same port and channel* only. Two cards on
 different ports (modwave + wavestate) must be able to play simultaneously —
 that is the entire point of the feature.
 
-**Independence from FluidSynth.** The hardware scheduler and the wavesurfer
-preview are separate transports. Send does not start the waveform; Play does
-not start the hardware. Do not attempt to sync them. Expect the global
-transport bar to show FluidSynth audio while hardware plays something else —
-that is correct behaviour, not a bug.
+### [rev3] Waveform sync — the cursor follows hardware
+
+Rev. 2 forbade this. Testing showed a frozen cursor and an inert click-to-seek
+read as a broken feature, so the waveform now tracks hardware playback.
+
+**Mechanism: play the wavesurfer instance muted.** When a hardware port is
+selected, `Play`/`Send` starts *both* the scheduler and the existing
+wavesurfer instance with `setVolume(0)`. This is deliberately not a
+hand-rolled cursor animation:
+
+- The cursor moves at wavesurfer's native frame rate, not in 100 ms tick
+  steps, so it looks the way Play already looks.
+- Click-to-seek, `timeupdate`, and the `finish` event all keep working with
+  no new code. The seek handler reads `ws.getCurrentTime()` and restarts the
+  scheduler with that `startSec`.
+- Volume is restored to 1 whenever the routing returns to SoftSynth.
+
+Start the wavesurfer playback `LEAD_MS` after the scheduler so the two line
+up; the scheduler's `originMs` already includes that lead.
+
+The two clocks (audio hardware vs `performance.now()`) can drift by a few
+milliseconds over a long stem. That is invisible in a cursor and inaudible —
+the *hardware* timing still derives entirely from `originMs`, so nothing
+about note timing depends on the audio clock. Do not attempt to correct it.
+
+**The global transport bar is not wired to hardware playback.** It is an audio
+transport, and during Send there is no audible browser audio. `transportLoad()`
+is called only for SoftSynth routing, which keeps `audio-player.js` untouched
+as rev. 2 required.
 
 ### Program Change
 
@@ -434,8 +521,9 @@ Port name + channel per stem label, in `localStorage` under key
 establishes the `stemforge.*` prefix). Restore by matching on **port name**,
 not port ID — IDs are not stable across reboots. Two identical interfaces
 produce duplicate names; first match wins, documented as a limitation.
-Silently fall back to "None" when no name matches. This is the last
-implementation step and can be dropped without affecting anything else.
+Silently fall back to **SoftSynth** when no name matches — a card whose synth
+is unplugged still previews in the browser. This is the last implementation
+step and can be dropped without affecting anything else.
 
 ### CSS — `frontend/style.css`
 
@@ -466,8 +554,14 @@ scope or introduces a failure mode.
   breaks playback by seconds, not milliseconds.
 - **Do not wire `statechange` to `panicAll()`.** It fires on connect too;
   handle disconnects per-scheduler.
-- **Do not sync hardware playback to the FluidSynth waveform.** Separate
-  transports, deliberately.
+- **[rev3] Do not let SoftSynth and a hardware port sound at once.** One
+  transport button, one destination. (This replaces rev. 2's "do not sync"
+  rule, which produced exactly that double-output problem.)
+- **[rev3] Do not hand-animate the waveform cursor.** Muted wavesurfer
+  playback gives the cursor, the seek handling, and the finish event for free.
+- **[rev3] Do not resynchronise the audio clock to `performance.now()`.**
+  Hardware note timing derives from `originMs` alone; the waveform is only a
+  display.
 - **Do not send Program Change by default.**
 - **Do not force channel 10 for `is_drum` tracks.**
 - **Do not add MIDI input, clock, MTC, or MMC.** Output only, no transport
@@ -486,9 +580,9 @@ scope or introduces a failure mode.
 
 | File | Action | Description |
 |------|--------|-------------|
-| `frontend/components/webmidi.js` | **New** | Port discovery, worker clock, lookahead scheduler, two-phase stop/panic |
+| `frontend/components/webmidi.js` | **New** | Port discovery, worker clock, lookahead scheduler, two-phase stop/panic. **[rev3]** `startSec` seek with the skip rule |
 | `backend/api/midi.py` | **Edit** | Add `POST /api/midi/events` (reuses existing `_resolve_midi`) |
-| `frontend/components/midi.js` | **Edit** | MIDI Out left-column section + per-card row + track merge |
+| `frontend/components/midi.js` | **Edit** | MIDI Out left-column section + per-card row + track merge. **[rev3]** unified transport button, SoftSynth routing, muted-wavesurfer cursor + seek |
 | `frontend/style.css` | **Edit** | `.midi-out-*` classes, `.btn-panic` |
 | `tests/test_midi_events.py` | **New** | Endpoint shape, ordering, overlap merge, clamping, truncation invariant, 404s |
 | `docs/INSTRUCTIONS.md` | **Edit** | MIDI Out subsection: usage, browser support, secure-context workarounds, ALSA port contention |
@@ -571,14 +665,32 @@ testing protocol.
     clock and is the single most likely real-world failure mode.
 14. Import an external multi-instrument `.mid` via the Import button → its
     card plays all instruments on the selected port/channel.
+15. **[rev3] One destination at a time.** With SoftSynth selected the button
+    reads Play and audio comes from the browser. Switch to a hardware port →
+    the button reads Send, the browser is silent, and only the synth sounds.
+    At no point can both be heard.
+16. **[rev3] Cursor tracks hardware.** Press Send → the waveform cursor moves
+    in step with what the synth is playing, and the time readout advances.
+17. **[rev3] Click-to-seek.** Click midway through the waveform during Send →
+    playback jumps there on the hardware. A note that was sounding across the
+    click point does **not** re-trigger; the next note starting after the
+    click does. Verify on a sustained patch, where a spurious re-attack would
+    be obvious.
+18. **[rev3] Switch routing mid-playback** → the current transport stops
+    cleanly rather than leaving a hanging note on either destination.
 
 **Timing**
-15. Play a quantized drum stem for 3+ minutes. Listen for gaps or jitter
-    against the FluidSynth render played separately. (Long-run *drift* is
+19. Play a quantized drum stem for 3+ minutes. Listen for gaps or jitter
+    against the FluidSynth render played separately (route a second copy of
+    the card to SoftSynth, or render it first). (Long-run *drift* is
     impossible by construction — every timestamp derives from one `originMs`
     — so what this test catches is starvation gaps and send jitter.)
-16. Load a dense stem (>5000 notes) and confirm no stutter at bar lines under
+20. Load a dense stem (>5000 notes) and confirm no stutter at bar lines under
     CPU load.
+21. **[rev3]** Over that same 3-minute run, confirm the cursor has not visibly
+    parted company with the audible notes. Small drift is expected and
+    harmless; a growing gap means someone wired note timing to the audio
+    clock, which the spec forbids.
 
 Report format: numbered item, pass/fail, and for failures the browser console
 output plus `aconnect -l` at the time.
@@ -701,5 +813,6 @@ a different port/channel from a single card, rather than requiring per-stem
 cards. The `tracks[]` response shape already supports it; only UI and
 scheduler fan-out are missing.
 
-**Seek / start-from-playhead.** Reintroduce a `startSec` argument to `play()`
-along with a defined rule for notes already sounding at the seek point.
+~~**Seek / start-from-playhead.**~~ **[rev3] Shipped** — `play()` takes
+`startSec` and skips notes already sounding at the seek point. See
+*`startSec` — the skip rule* above.
