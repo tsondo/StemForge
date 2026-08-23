@@ -121,8 +121,11 @@ class ExtractRequest(BaseModel):
 
 class RenderRequest(BaseModel):
     stem_label: str
-    program: int = 0
-    is_drum: bool = False
+    # None means "leave each instrument's own voice alone" — required for
+    # merged MIDI, where forcing one program would collapse a multi-
+    # instrument arrangement to a single sound.
+    program: int | None = None
+    is_drum: bool | None = None
 
 
 class EventsRequest(BaseModel):
@@ -221,19 +224,20 @@ def start_extraction(req: ExtractRequest, session: SessionStore = Depends(get_us
 
 @router.post("/render")
 def render_midi_to_audio(req: RenderRequest, session: SessionStore = Depends(get_user_session)) -> dict:
-    """Render a stem's MIDI to audio via FluidSynth."""
-    stem_midi = session.stem_midi_data
-    if req.stem_label not in stem_midi:
-        raise HTTPException(404, f"No MIDI for stem '{req.stem_label}'")
+    """Render a stem's MIDI to audio via FluidSynth.
 
-    import pretty_midi
+    Accepts ``merged`` as well as a stem label, so the merged arrangement
+    can be previewed through the soft synth like any other card.
+    """
+    midi_data = copy.deepcopy(_resolve_midi(req.stem_label, session))
 
-    midi_data = copy.deepcopy(stem_midi[req.stem_label])
-
-    # Set program/drum for all instruments
+    # Override every instrument only when the caller asked for it. Omitting
+    # both preserves the arrangement's own voices.
     for inst in midi_data.instruments:
-        inst.program = req.program
-        inst.is_drum = req.is_drum
+        if req.program is not None:
+            inst.program = req.program
+        if req.is_drum is not None:
+            inst.is_drum = req.is_drum
 
     # Use source sample rate for MIDI renders
     audio_info = session.audio_info or {}

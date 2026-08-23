@@ -285,8 +285,9 @@ flat array and each card has exactly one port/channel pair. The rule:
   copy; `merged` and multi-instrument imports are where it matters.
 - Whether a **merged** card appears in the MIDI Out UI at all: yes, iff
   `session.merged_midi_data` exists — same visibility rule the Save controls
-  use. All of its instruments play on the card's single port/channel;
-  per-instrument routing is deferred (see *Deferred*).
+  used. **[rev3]** It is a full card like any stem. All of its instruments
+  play on the card's single port/channel; per-instrument routing is deferred
+  (see *Deferred*).
 
 ### Scheduling design
 
@@ -447,6 +448,26 @@ card's existing Play/Stop/Rewind drive whichever destination `portSelect`
 names. `channelSelect` and `progChangeLabel` are disabled while SoftSynth is
 selected, since neither means anything for the FluidSynth render.
 
+**[rev3] Merged MIDI is a card, not a stray row.** The initial rev. 3 draft
+left merged as a standalone row keeping its own Send/Stop, on the grounds
+that it had no card to borrow a transport from. In use that read as an
+unexplained third routing selector belonging to nothing. Merged instead gets
+a **full card** — waveform, transport, tools — so it obeys the single-
+transport rule like everything else and can go to the soft synth *or* to
+hardware. Two consequences:
+
+- `POST /api/midi/render` must accept `merged`. It was the one MIDI endpoint
+  not using `_resolve_midi`; now it does.
+- `program` / `is_drum` on that request become **optional**. Omitting them
+  preserves each instrument's own voice, which merged requires — forcing one
+  program would collapse a multi-instrument arrangement to a single sound.
+  A stem card still sends both and still overrides.
+
+The merged card hides the instrument selector (its tracks each carry their
+own program) and therefore shows no Program Change checkbox. It replaces the
+old *Save merged MIDI / Clean Up All / Sheet Music (All)* button row, whose
+functions the card already provides.
+
 The row is hidden entirely when `!isSupported()` — a dead control is worse
 than no control. **[rev3]** When Web MIDI is unavailable the card behaves
 exactly as it did before this feature existed: Play, FluidSynth, done.
@@ -581,10 +602,11 @@ scope or introduces a failure mode.
 | File | Action | Description |
 |------|--------|-------------|
 | `frontend/components/webmidi.js` | **New** | Port discovery, worker clock, lookahead scheduler, two-phase stop/panic. **[rev3]** `startSec` seek with the skip rule |
-| `backend/api/midi.py` | **Edit** | Add `POST /api/midi/events` (reuses existing `_resolve_midi`) |
+| `backend/api/midi.py` | **Edit** | Add `POST /api/midi/events` (reuses existing `_resolve_midi`). **[rev3]** `/render` resolves `merged` and treats `program`/`is_drum` as optional overrides |
 | `frontend/components/midi.js` | **Edit** | MIDI Out left-column section + per-card row + track merge. **[rev3]** unified transport button, SoftSynth routing, muted-wavesurfer cursor + seek |
 | `frontend/style.css` | **Edit** | `.midi-out-*` classes, `.btn-panic` |
 | `tests/test_midi_events.py` | **New** | Endpoint shape, ordering, overlap merge, clamping, truncation invariant, 404s |
+| `tests/test_midi_render.py` | **New** | **[rev3]** Instrument preservation vs override, merged resolution, no session mutation, 404s |
 | `docs/INSTRUCTIONS.md` | **Edit** | MIDI Out subsection: usage, browser support, secure-context workarounds, ALSA port contention |
 | `README.md` | **Edit** | Feature bullet + browser requirement note |
 | `docs/FUTURE_PLANS.md` | **Edit** | Move DAW/MIDI note; add MIDI input as deferred |
@@ -678,16 +700,20 @@ testing protocol.
     be obvious.
 18. **[rev3] Switch routing mid-playback** → the current transport stops
     cleanly rather than leaving a hanging note on either destination.
+19. **[rev3] Merged card.** It appears as a normal card with a waveform.
+    Under SoftSynth it renders with each instrument's own voice — a bass
+    track should not come out sounding like the drum track. Route it to a
+    port and Send → the whole arrangement plays on that synth.
 
 **Timing**
-19. Play a quantized drum stem for 3+ minutes. Listen for gaps or jitter
+20. Play a quantized drum stem for 3+ minutes. Listen for gaps or jitter
     against the FluidSynth render played separately (route a second copy of
     the card to SoftSynth, or render it first). (Long-run *drift* is
     impossible by construction — every timestamp derives from one `originMs`
     — so what this test catches is starvation gaps and send jitter.)
-20. Load a dense stem (>5000 notes) and confirm no stutter at bar lines under
+21. Load a dense stem (>5000 notes) and confirm no stutter at bar lines under
     CPU load.
-21. **[rev3]** Over that same 3-minute run, confirm the cursor has not visibly
+22. **[rev3]** Over that same 3-minute run, confirm the cursor has not visibly
     parted company with the audible notes. Small drift is expected and
     harmless; a growing gap means someone wired note timing to the audio
     clock, which the spec forbids.

@@ -203,8 +203,13 @@ StemForge server runs elsewhere.
    (matched by port name; if that interface isn't connected, the card falls
    back to SoftSynth so it still previews).
 
-The merged-MIDI row is the one exception to the single-transport rule: it has
-no card and no waveform of its own, so it keeps a dedicated Send/Stop pair.
+When a merged MIDI track exists it gets its own card, labelled **All Stems
+(Merged)**, which behaves like any other: route it to SoftSynth to hear the
+whole arrangement through the browser, or to a port to play it on hardware.
+It has no instrument dropdown, because each of its tracks keeps the voice it
+was extracted with, and so it sends no Program Change. Its Save, Clean Up,
+Detect Key, Transpose, and Sheet Music controls replace the old row of
+merged-only buttons.
 
 Edits made with Clean Up or Transpose while a card is playing take effect on
 the next Send — hardware keeps playing the pre-edit snapshot until then.

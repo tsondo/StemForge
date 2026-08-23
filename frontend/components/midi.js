@@ -601,81 +601,18 @@ function showMidiResults(result) {
   appState.midiHasMerged = !!result.has_merged;
   appState.emit('midiReady', result);
 
-  // Merged MIDI buttons
+  // Merged MIDI gets a full card of its own — waveform, transport, tools,
+  // and the same routing dropdown as any stem — so it can go to the soft
+  // synth or to hardware under the one-transport rule (spec rev. 3). Its
+  // Save/Clean Up/Sheet Music controls come from the card, replacing the
+  // standalone button row this used to be.
   if (result.has_merged) {
-    const mergedRow = el('div', { className: 'midi-merged-row' });
-
-    mergedRow.appendChild(
-      el('button', {
-        className: 'btn',
-        onClick: async () => {
-          try {
-            const res = await api('/midi/save', {
-              method: 'POST',
-              body: JSON.stringify({ label: 'merged' }),
-            });
-            alert(`Saved: ${res.path}`);
-          } catch (err) {
-            alert(`Save failed: ${err.message}`);
-          }
-        },
-      }, 'Save merged MIDI'),
-    );
-
-    // Clean Up All merged
-    const cleanAllBtn = el('button', { className: 'btn btn-sm' }, 'Clean Up All');
-    cleanAllBtn.addEventListener('click', async () => {
-      cleanAllBtn.disabled = true;
-      cleanAllBtn.textContent = 'Cleaning...';
-      try {
-        const key = document.getElementById('midi-key').value;
-        const ts = document.getElementById('midi-ts').value;
-        await api('/midi/clean', {
-          method: 'POST',
-          body: JSON.stringify({
-            stem_label: 'merged',
-            key: key !== 'Any' ? key : null,
-            time_signature: ts,
-          }),
-        });
-        cleanAllBtn.textContent = 'Cleaned \u2713';
-        setTimeout(() => { cleanAllBtn.textContent = 'Clean Up All'; cleanAllBtn.disabled = false; }, 2000);
-      } catch (err) {
-        alert(`Clean failed: ${err.message}`);
-        cleanAllBtn.textContent = 'Clean Up All';
-        cleanAllBtn.disabled = false;
-      }
+    const mergedNotes = Object.values(result.stem_info || {})
+      .reduce((sum, i) => sum + (i.note_count || 0), 0);
+    buildMidiCard('merged', { note_count: mergedNotes }, {
+      merged: true,
+      displayName: 'All Stems (Merged)',
     });
-    mergedRow.appendChild(cleanAllBtn);
-
-    // Sheet Music (All)
-    const sheetAllBtn = el('button', { className: 'btn btn-sm' }, 'Sheet Music (All)');
-    sheetAllBtn.addEventListener('click', async () => {
-      sheetAllBtn.disabled = true;
-      sheetAllBtn.textContent = 'Loading...';
-      try {
-        const res = await api('/midi/sheet-music', {
-          method: 'POST',
-          body: JSON.stringify({ stem_label: 'merged', title: 'All Stems (Merged)' }),
-        });
-        showSheetMusicPanel(container, res.musicxml, 'merged');
-        sheetAllBtn.textContent = 'Sheet Music (All)';
-        sheetAllBtn.disabled = false;
-      } catch (err) {
-        alert(`Sheet music failed: ${err.message}`);
-        sheetAllBtn.textContent = 'Sheet Music (All)';
-        sheetAllBtn.disabled = false;
-      }
-    });
-    mergedRow.appendChild(sheetAllBtn);
-
-    container.appendChild(mergedRow);
-    // The merged MIDI gets hardware output too — same visibility rule as
-    // the Save controls. All instruments play on the row's single
-    // port/channel; per-instrument routing is deferred. It is the one row
-    // that keeps its own Send/Stop: there is no merged card, so it has no
-    // transport to borrow and no waveform to follow.
-    container.appendChild(buildMidiOutRow('merged', { standalone: true }).row);
   }
 
   // Per-stem result cards with full playback
@@ -762,14 +699,13 @@ function buildMidiOutSection() {
  * once, which is never wanted.
  *
  * opts.getProgram: () => GM program 0-127, or null when nothing sendable
- *   is selected (Drum Kit).
- * opts.standalone: render the row's own Send/Stop pair. Used only by the
- *   merged row, which has no card and therefore no transport to borrow.
+ *   is selected (Drum Kit). Omitted by the merged card, whose instruments
+ *   each carry their own program — there is no single one to send.
  *
  * Returns a controller the card wires its transport to.
  */
 function buildMidiOutRow(label, opts = {}) {
-  const { getProgram = null, standalone = false } = opts;
+  const { getProgram = null } = opts;
 
   const portSelect = el('select', { className: 'midi-out-select midi-out-port' });
   const channelSelect = el('select', { className: 'midi-out-select' });
@@ -785,14 +721,9 @@ function buildMidiOutRow(label, opts = {}) {
     progChangeBox, 'Send Program Change');
   const outStatus = el('span', { className: 'midi-out-status text-dim' });
 
-  const sendBtn = standalone
-    ? el('button', { className: 'btn btn-sm', disabled: 'true' }, '▶ Send') : null;
-  const outStopBtn = standalone
-    ? el('button', { className: 'btn btn-sm', disabled: 'true' }, '■ Stop') : null;
-
   const row = el('div', { className: 'midi-out-row' },
     el('label', { className: 'text-dim' }, 'MIDI Out:'),
-    portSelect, channelSelect, sendBtn, outStopBtn, progChangeLabel, outStatus,
+    portSelect, channelSelect, progChangeLabel, outStatus,
   );
   if (!getProgram) progChangeLabel.classList.add('hidden');
 
@@ -836,18 +767,13 @@ function buildMidiOutRow(label, opts = {}) {
     channelSelect.disabled = !hw;
     progChangeBox.disabled = !hw;
     progChangeLabel.classList.toggle('text-disabled', !hw);
-    if (sendBtn) {
-      if (midiOutReady && hw) sendBtn.removeAttribute('disabled');
-      else sendBtn.setAttribute('disabled', 'true');
-    }
   }
 
   function refreshPortOptions(outputs) {
     const prev = portSelect.value;
     clearChildren(portSelect);
     // Not "None" — this entry routes to FluidSynth, a real destination.
-    portSelect.appendChild(el('option', { value: '' },
-      standalone ? 'None' : 'SoftSynth'));
+    portSelect.appendChild(el('option', { value: '' }, 'SoftSynth'));
     for (const o of outputs) {
       portSelect.appendChild(el('option', { value: o.id, title: o.name }, o.name));
     }
@@ -874,7 +800,6 @@ function buildMidiOutRow(label, opts = {}) {
     if (sched) sched.stop();
     sched = null;
     entry.sched = null;
-    if (outStopBtn) outStopBtn.setAttribute('disabled', 'true');
     outStatus.textContent = msg;
     syncRoutingState();
   }
@@ -911,7 +836,6 @@ function buildMidiOutRow(label, opts = {}) {
     const channel = parseInt(channelSelect.value, 10);
     if (!portId) return false;
 
-    if (sendBtn) sendBtn.setAttribute('disabled', 'true');
     let data;
     try {
       data = await loadEvents();
@@ -960,12 +884,8 @@ function buildMidiOutRow(label, opts = {}) {
       if (errorCb) errorCb();
     });
     sched.play(data.events, { program, startSec });
-    if (outStopBtn) outStopBtn.removeAttribute('disabled');
     return true;
   }
-
-  if (sendBtn) sendBtn.addEventListener('click', () => start(0));
-  if (outStopBtn) outStopBtn.addEventListener('click', () => stopPlayback());
 
   // Port/channel changes take effect on the next Send — the scheduler's
   // binding is fixed at creation, deliberately. Switching routing while
@@ -1002,7 +922,11 @@ function buildMidiOutRow(label, opts = {}) {
  * Build a MIDI result card with waveform, playback controls, and instrument selector.
  * Mirrors the stem cards in the Separate tab.
  */
-function buildMidiCard(label, info) {
+function buildMidiCard(label, info, opts = {}) {
+  // merged: the card represents every stem at once. It has no single
+  // instrument — each of its tracks carries its own program — so the
+  // instrument selector is hidden and renders preserve those voices.
+  const { merged = false, displayName = label } = opts;
   const container = document.getElementById('midi-results');
   const card = el('div', { className: 'stem-card' });
 
@@ -1045,7 +969,7 @@ function buildMidiCard(label, info) {
   }, '\u2193 Save');
 
   const header = el('div', { className: 'stem-card-header' },
-    el('span', { className: 'stem-label' }, `${label} (${info.note_count} notes)`),
+    el('span', { className: 'stem-label' }, `${displayName} (${info.note_count} notes)`),
     el('div', { className: 'stem-actions' },
       playBtn, stopBtn, rewindBtn, timeLabel, saveBtn,
     ),
@@ -1058,7 +982,7 @@ function buildMidiCard(label, info) {
   );
 
   // MIDI Out row — routing only; the card's transport below drives it.
-  const midiOut = buildMidiOutRow(label, {
+  const midiOut = buildMidiOutRow(label, merged ? {} : {
     getProgram: () => {
       const val = instrumentSelect.value;
       return val === 'drum' ? null : parseInt(val, 10);
@@ -1123,6 +1047,7 @@ function buildMidiCard(label, info) {
   // Sheet music panel placeholder
   const sheetPanel = el('div', { className: 'sheet-music-panel hidden' });
 
+  if (merged) instrumentRow.classList.add('hidden');
   card.append(header, instrumentRow, midiOutRow, waveContainer, renderHint, toolsRow, sheetPanel);
   container.appendChild(card);
 
@@ -1142,7 +1067,7 @@ function buildMidiCard(label, info) {
           time_signature: ts,
         }),
       });
-      noteCountLabel.textContent = `${label} (${res.note_count} notes)`;
+      noteCountLabel.textContent = `${displayName} (${res.note_count} notes)`;
       cleanBtn.textContent = 'Cleaned \u2713';
       transposeOffset = 0;
       transposeLabel.textContent = '0';
@@ -1209,7 +1134,7 @@ function buildMidiCard(label, info) {
       });
       transposeOffset += direction * (_intervalSemitones[mode] || 1);
       transposeLabel.textContent = transposeOffset > 0 ? `+${transposeOffset}` : String(transposeOffset);
-      noteCountLabel.textContent = `${label} (${res.note_count} notes)`;
+      noteCountLabel.textContent = `${displayName} (${res.note_count} notes)`;
       // Re-render waveform
       renderedUrl = null;
       midiOut.invalidate();
@@ -1235,7 +1160,7 @@ function buildMidiCard(label, info) {
       try {
         const res = await api('/midi/sheet-music', {
           method: 'POST',
-          body: JSON.stringify({ stem_label: label, title: label }),
+          body: JSON.stringify({ stem_label: label, title: displayName }),
         });
         showSheetMusicPanel(sheetPanel, res.musicxml, label);
       } catch (err) {
@@ -1248,7 +1173,7 @@ function buildMidiCard(label, info) {
         const resp = await fetch('/api/midi/sheet-music/pdf', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stem_label: label, title: label }),
+          body: JSON.stringify({ stem_label: label, title: displayName }),
         });
         if (!resp.ok) throw new Error(await resp.text());
         const blob = await resp.blob();
@@ -1261,7 +1186,7 @@ function buildMidiCard(label, info) {
         const resp = await fetch('/api/midi/sheet-music/musicxml', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stem_label: label, title: label }),
+          body: JSON.stringify({ stem_label: label, title: displayName }),
         });
         if (!resp.ok) throw new Error(await resp.text());
         const blob = await resp.blob();
@@ -1277,7 +1202,7 @@ function buildMidiCard(label, info) {
       const resp = await fetch('/api/midi/sheet-music/musicxml', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stem_label: label, title: label }),
+        body: JSON.stringify({ stem_label: label, title: displayName }),
       });
       if (!resp.ok) throw new Error(await resp.text());
       const blob = await resp.blob();
@@ -1334,9 +1259,14 @@ function buildMidiCard(label, info) {
     playBtn.textContent = 'Rendering...';
 
     try {
+      // Sending no program/is_drum tells the backend to preserve each
+      // instrument's own voice — what the merged arrangement needs.
+      const body = merged
+        ? { stem_label: label }
+        : { stem_label: label, program, is_drum: isDrum };
       const res = await api('/midi/render', {
         method: 'POST',
-        body: JSON.stringify({ stem_label: label, program, is_drum: isDrum }),
+        body: JSON.stringify(body),
       });
       renderedUrl = `/api/audio/stream?path=${encodeURIComponent(res.audio_path)}`;
       lastProgram = val;
@@ -1476,7 +1406,7 @@ function buildMidiCard(label, info) {
 
   // Re-render when instrument changes and audio was already rendered;
   // also sync the instrument to the corresponding Mix track.
-  instrumentSelect.addEventListener('change', () => {
+  if (!merged) instrumentSelect.addEventListener('change', () => {
     const val = instrumentSelect.value;
     const isDrum = val === 'drum';
     const program = isDrum ? 0 : parseInt(val, 10);
@@ -1552,7 +1482,7 @@ async function showSheetMusicPanel(panel, musicxml, label) {
       const resp = await fetch('/api/midi/sheet-music/musicxml', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stem_label: label, title: label }),
+        body: JSON.stringify({ stem_label: label, title: displayName }),
       });
       if (!resp.ok) throw new Error(await resp.text());
       const blob = await resp.blob();
@@ -1568,7 +1498,7 @@ async function showSheetMusicPanel(panel, musicxml, label) {
         const resp = await fetch('/api/midi/sheet-music/pdf', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stem_label: label, title: label }),
+          body: JSON.stringify({ stem_label: label, title: displayName }),
         });
         if (!resp.ok) throw new Error(await resp.text());
         const blob = await resp.blob();
