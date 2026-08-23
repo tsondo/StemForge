@@ -29,6 +29,7 @@ StemForge runs entirely on your local machine with no internet connection requir
 - **Demucs** — stem separation (vocals, drums, bass, other) — 4 models including fine-tuned and MDX variants
 - **BS-Roformer** — high-quality AI stem separation with 2-stem vocal, 4-stem, and 6-stem (guitar + piano) models
 - **MIDI extraction** — polyphonic BasicPitch for instruments, faster-whisper + pitch tracking for vocals; per-stem MIDI preview via FluidSynth
+- **MIDI Out** — stream extracted MIDI straight to hardware synths via Web MIDI, with per-stem port/channel routing, optional Program Change, and a Panic button (Chrome/Edge required)
 - **Enhance** — three-mode vocal enhancement: Clean Up (8 UVR denoise/dereverb presets), Tune (CREPE + Praat PSOLA auto-tune with key/scale snapping), Effects (planned)
 - **Stable Audio Open** — text-conditioned audio generation up to 600 s, with optional audio and MIDI conditioning (Synth tab)
 - **SFX Stem Builder** — DAW-style timeline canvas for placing audio clips with per-clip fades and volume, aligned to a reference stem (Synth tab)
@@ -313,7 +314,7 @@ AI-powered stem separation using Demucs and BS-Roformer. Upload any audio or vid
 Three-mode vocal enhancement. **Clean Up** applies UVR denoise, dereverb, or debleed via 8 curated presets across Roformer/MDXC/VR architectures. **Tune** applies auto-tune via CREPE neural pitch detection + WORLD vocoder resynthesis — choose key, scale, correction strength, and humanization. **Effects** is planned (custom DSP via scipy.signal). Batch mode supported for Clean Up.
 
 ### MIDI
-Extract MIDI from separated stems. BasicPitch handles polyphonic instrument stems; faster-whisper + PYIN pitch tracking handles vocal melodies. Per-stem FluidSynth preview lets you audition MIDI renderings directly in the browser via wavesurfer.js.
+Extract MIDI from separated stems. BasicPitch handles polyphonic instrument stems; faster-whisper + PYIN pitch tracking handles vocal melodies. Per-stem FluidSynth preview lets you audition MIDI renderings directly in the browser via wavesurfer.js. **MIDI Out** streams any stem to hardware synthesizers over the Web MIDI API — per-stem port/channel routing, simultaneous playback on multiple ports, optional Program Change, and a global Panic button. Requires Chrome or Edge and a secure context (localhost or HTTPS).
 
 ### Synth
 Text-conditioned audio generation via Stable Audio Open 1.0 (44,100 Hz stereo).
