@@ -125,6 +125,10 @@ class RenderRequest(BaseModel):
     is_drum: bool = False
 
 
+class EventsRequest(BaseModel):
+    stem_label: str
+
+
 class SaveRequest(BaseModel):
     label: str = "merged"    # "merged" or a stem label
     smf_format: int = 1      # 1 = multi-track, 0 = single-track (hardware arrangers)
@@ -259,6 +263,106 @@ def render_midi_to_audio(req: RenderRequest, session: SessionStore = Depends(get
     return {
         "audio_path": str(out_path),
         "duration": len(audio) / sr,
+    }
+
+
+# Hard cap on events per /events response. A stem this dense is almost
+# certainly a BasicPitch artefact and should go through Clean Up first.
+MAX_MIDI_OUT_EVENTS = 20000
+
+
+def _flatten_instrument_notes(inst) -> list[tuple[float, float, int, int]]:
+    """Clean one instrument's notes for Web MIDI: (start, end, pitch, vel).
+
+    Drops zero-length notes, clamps pitch to 0-127 and note-on velocity to
+    1-127 (velocity 0 reads as note-off on hardware), and merges overlapping
+    same-pitch notes by truncating the earlier note to the later one's start
+    — hardware cannot represent the overlap, and the frontend's sounding-set
+    would corrupt.
+    """
+    notes = [n for n in inst.notes if n.end > n.start]
+    notes.sort(key=lambda n: (n.start, n.pitch))
+
+    cleaned: list[tuple[float, float, int, int] | None] = []
+    last_by_pitch: dict[int, int] = {}
+    for n in notes:
+        pitch = min(max(int(n.pitch), 0), 127)
+        vel = min(max(int(n.velocity), 1), 127)
+        start, end = float(n.start), float(n.end)
+        prev_i = last_by_pitch.get(pitch)
+        if prev_i is not None:
+            prev = cleaned[prev_i]
+            if prev is not None and prev[1] > start:
+                if start > prev[0]:
+                    cleaned[prev_i] = (prev[0], start, pitch, prev[3])
+                else:
+                    cleaned[prev_i] = None  # same start — earlier note vanishes
+        cleaned.append((start, end, pitch, vel))
+        last_by_pitch[pitch] = len(cleaned) - 1
+    return [c for c in cleaned if c is not None]
+
+
+@router.post("/events")
+def get_midi_events(
+    req: EventsRequest,
+    session: SessionStore = Depends(get_user_session),
+) -> dict:
+    """Flatten a session PrettyMIDI to a JSON note-event list for Web MIDI.
+
+    Returns one entry in ``tracks`` per PrettyMIDI instrument.  Events
+    within a track are sorted ascending by time, note-off before note-on
+    at equal timestamps.  Read-only — session MIDI is never modified.
+    """
+    midi_data = _resolve_midi(req.stem_label, session)
+
+    track_notes = [
+        (inst, _flatten_instrument_notes(inst)) for inst in midi_data.instruments
+    ]
+
+    # Truncate by whole notes (never split an on from its off): drop the
+    # latest-starting notes across all tracks until under the event cap.
+    truncated = False
+    total_notes = sum(len(notes) for _, notes in track_notes)
+    if total_notes * 2 > MAX_MIDI_OUT_EVENTS:
+        truncated = True
+        keep = MAX_MIDI_OUT_EVENTS // 2
+        indexed = [
+            (note[0], ti, note)
+            for ti, (_, notes) in enumerate(track_notes)
+            for note in notes
+        ]
+        indexed.sort(key=lambda x: x[0])
+        kept_per_track: list[list[tuple[float, float, int, int]]] = [
+            [] for _ in track_notes
+        ]
+        for _, ti, note in indexed[:keep]:
+            kept_per_track[ti].append(note)
+        track_notes = [
+            (inst, kept_per_track[ti]) for ti, (inst, _) in enumerate(track_notes)
+        ]
+
+    tracks = []
+    total_events = 0
+    for inst, notes in track_notes:
+        events = []
+        for start, end, pitch, vel in notes:
+            events.append({"t": start, "type": "on", "note": pitch, "vel": vel})
+            events.append({"t": end, "type": "off", "note": pitch, "vel": 0})
+        events.sort(key=lambda e: (e["t"], 0 if e["type"] == "off" else 1))
+        total_events += len(events)
+        tracks.append({
+            "name": inst.name or req.stem_label,
+            "is_drum": bool(inst.is_drum),
+            "program": int(inst.program),
+            "events": events,
+        })
+
+    return {
+        "label": req.stem_label,
+        "duration": float(midi_data.get_end_time()),
+        "total_events": total_events,
+        "truncated": truncated,
+        "tracks": tracks,
     }
 
 
