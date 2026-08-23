@@ -583,6 +583,12 @@ input[type="range"]::-moz-range-track {
 
 /* ─── MIDI Out (Web MIDI hardware output) ────────────────────────────── */
 
+.midi-out-section {
+  /* #midi-controls-notes is plain block flow — without this the Panic
+     button sits flush against the Extract MIDI button below. */
+  margin-bottom: 16px;
+}
+
 .midi-out-section .banner {
   margin-bottom: 8px;
   font-size: 12px;

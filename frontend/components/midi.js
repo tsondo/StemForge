@@ -38,6 +38,30 @@ const midiOutRefreshers = [];  // each cb receives getOutputs() on any port chan
  */
 const _outSchedulers = [];
 
+/**
+ * Port + channel per stem label, persisted across sessions. Ports are
+ * matched by NAME, not id — ids are not stable across reboots. Two
+ * identical interfaces produce duplicate names; first match wins
+ * (documented limitation). No match falls back silently to "None".
+ */
+const MIDI_OUT_LS_KEY = 'stemforge.midiout';
+
+function loadMidiOutPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(MIDI_OUT_LS_KEY)) || {};
+  } catch (err) {
+    return {};
+  }
+}
+
+function saveMidiOutPref(label, portName, channel) {
+  try {
+    const prefs = loadMidiOutPrefs();
+    prefs[label] = { port: portName, channel };
+    localStorage.setItem(MIDI_OUT_LS_KEY, JSON.stringify(prefs));
+  } catch (err) { /* storage unavailable — persistence is best-effort */ }
+}
+
 function stopOtherPlayers(except) {
   for (const p of midiPlayers) {
     if (p.ws !== except && p.ws.isPlaying()) {
@@ -767,6 +791,15 @@ function buildMidiOutRow(label, getProgram) {
 
   let sched = null;
 
+  // Saved preference for this stem — the channel applies immediately, the
+  // port by name-match once ports are known. Auto-restore stops as soon as
+  // the user touches the port dropdown, so an explicit "None" sticks.
+  const pref = loadMidiOutPrefs()[label] || null;
+  let autoRestorePort = !!(pref && pref.port);
+  if (pref && pref.channel >= 1 && pref.channel <= 16) {
+    channelSelect.value = String(pref.channel);
+  }
+
   function syncSendState() {
     if (midiOutReady && portSelect.value) sendBtn.removeAttribute('disabled');
     else sendBtn.setAttribute('disabled', 'true');
@@ -779,8 +812,22 @@ function buildMidiOutRow(label, getProgram) {
     for (const o of outputs) {
       portSelect.appendChild(el('option', { value: o.id, title: o.name }, o.name));
     }
-    portSelect.value = Array.from(portSelect.options).some(op => op.value === prev) ? prev : '';
+    if (Array.from(portSelect.options).some(op => op.value === prev && prev !== '')) {
+      portSelect.value = prev;
+    } else if (autoRestorePort) {
+      const match = outputs.find(o => o.name === pref.port);  // first match wins
+      portSelect.value = match ? match.id : '';
+    } else {
+      portSelect.value = '';
+    }
     syncSendState();
+  }
+
+  function savePref() {
+    const selected = portSelect.selectedOptions[0];
+    saveMidiOutPref(label,
+      portSelect.value ? selected.textContent : null,
+      parseInt(channelSelect.value, 10));
   }
 
   function resetUi(msg) {
@@ -877,7 +924,12 @@ function buildMidiOutRow(label, getProgram) {
   outStopBtn.addEventListener('click', () => stopPlayback());
   // Port/channel changes during playback take effect on the next Send —
   // the scheduler's binding is fixed at creation, deliberately.
-  portSelect.addEventListener('change', syncSendState);
+  portSelect.addEventListener('change', () => {
+    autoRestorePort = false;
+    savePref();
+    syncSendState();
+  });
+  channelSelect.addEventListener('change', savePref);
 
   midiOutRefreshers.push(refreshPortOptions);
   refreshPortOptions(getOutputs());
