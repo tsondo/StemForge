@@ -6,6 +6,7 @@
 import { appState, api, pollJob, el, formatTime, saveFileAs } from '../app.js';
 import { createWaveform } from './waveform.js';
 import { transportLoad, transportStop } from './audio-player.js';
+import { isSupported as webMidiSupported, initWebMidi, getOutputs, onPortsChanged, panicAll } from './webmidi.js';
 
 function clearChildren(elem) {
   while (elem.firstChild) elem.removeChild(elem.firstChild);
@@ -25,6 +26,10 @@ let _lilypondAvailable = false;
 
 /** All active MIDI card players — for exclusive playback. */
 const midiPlayers = [];
+
+/** Web MIDI output state — access granted, and card-row refresh hooks. */
+let midiOutReady = false;
+const midiOutRefreshers = [];  // each cb receives getOutputs() on any port change
 
 function stopOtherPlayers(except) {
   for (const p of midiPlayers) {
@@ -115,6 +120,9 @@ export function initMidi() {
     ),
   );
 
+  // ─── MIDI Out (Web MIDI hardware output) ───
+  const midiOutSection = buildMidiOutSection();
+
   const extractBtn = el('button', { className: 'btn btn-primary', id: 'midi-start', disabled: 'true' },
     'Extract MIDI',
   );
@@ -123,7 +131,7 @@ export function initMidi() {
   const importInput = el('input', { type: 'file', accept: '.mid,.midi', style: { display: 'none' }, id: 'midi-import-input' });
   const importBtn = el('button', { className: 'btn btn-sm', id: 'midi-import' }, 'Import MIDI file');
 
-  notesControls.append(stemSection, keyGroup, bpmGroup, tsGroup, onsetGroup, frameGroup, sf2Group, extractBtn, importInput, importBtn);
+  notesControls.append(stemSection, keyGroup, bpmGroup, tsGroup, onsetGroup, frameGroup, sf2Group, midiOutSection, extractBtn, importInput, importBtn);
   left.append(notesControls, lyricsControls);
 
   // ─── Lyrics control panel ───
@@ -634,6 +642,76 @@ function showMidiResults(result) {
   for (const [label, info] of Object.entries(result.stem_info || {})) {
     buildMidiCard(label, info);
   }
+}
+
+/**
+ * Build the left-column MIDI Out section: availability banner, Request
+ * access button, Panic button. Web MIDI availability is a browser
+ * property — detection is entirely client-side, the server cannot know.
+ */
+function buildMidiOutSection() {
+  const banner = el('div', { className: 'banner banner-info', id: 'midi-out-banner' });
+  const requestBtn = el('button', { className: 'btn btn-sm', id: 'midi-out-request' }, 'Request access');
+  const panicBtn = el('button', {
+    className: 'btn btn-sm btn-panic', id: 'midi-out-panic', disabled: 'true',
+    title: 'Silence every known MIDI output on all channels',
+  }, '⏻ Panic');
+  const actions = el('div', { className: 'midi-out-actions' }, requestBtn, panicBtn);
+  const section = el('div', { className: 'form-group midi-out-section' },
+    el('label', {}, 'MIDI Out'), banner, actions,
+  );
+
+  function setBanner(cls, text) {
+    banner.className = `banner ${cls}`;
+    banner.textContent = text;
+  }
+
+  function refreshPorts() {
+    const outputs = getOutputs();
+    if (outputs.length === 0) {
+      setBanner('banner-warn', 'No MIDI outputs found. Connect an interface — the list updates automatically.');
+    } else {
+      setBanner('banner-success', `✓ ${outputs.length} output port${outputs.length === 1 ? '' : 's'} found`);
+    }
+    for (const cb of midiOutRefreshers) {
+      try { cb(outputs); } catch (err) { console.error('MIDI Out refresh failed', err); }
+    }
+  }
+
+  async function grantAccess() {
+    try {
+      await initWebMidi();
+    } catch (err) {
+      setBanner('banner-error', 'MIDI access was denied. Click Request access and allow the prompt.');
+      return;
+    }
+    midiOutReady = true;
+    // MIDIAccess.outputs is a live map kept current by statechange —
+    // once granted there is nothing to rescan, so the button goes away.
+    requestBtn.classList.add('hidden');
+    panicBtn.removeAttribute('disabled');
+    onPortsChanged(refreshPorts);
+    refreshPorts();
+  }
+
+  if (!window.isSecureContext) {
+    setBanner('banner-error', 'Web MIDI requires HTTPS or localhost. Open StemForge at http://localhost:8765.');
+    actions.classList.add('hidden');
+  } else if (!webMidiSupported()) {
+    setBanner('banner-error', 'Web MIDI is not available in this browser. Chrome or Edge is required.');
+    actions.classList.add('hidden');
+  } else {
+    setBanner('banner-info', 'Click Request access to enable hardware MIDI output.');
+    requestBtn.addEventListener('click', grantAccess);
+    panicBtn.addEventListener('click', panicAll);
+    // If permission was already granted, initialize silently — query first
+    // so first-time visitors are not hit with a prompt on tab load.
+    navigator.permissions?.query({ name: 'midi', sysex: false })
+      .then((status) => { if (status.state === 'granted') grantAccess(); })
+      .catch(() => {});
+  }
+
+  return section;
 }
 
 /**

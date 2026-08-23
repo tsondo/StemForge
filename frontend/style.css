@@ -581,6 +581,29 @@ input[type="range"]::-moz-range-track {
   gap: 6px;
 }
 
+/* ─── MIDI Out (Web MIDI hardware output) ────────────────────────────── */
+
+.midi-out-section .banner {
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.midi-out-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-panic {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.btn-panic:hover:not(:disabled) {
+  background: var(--error);
+  color: #ffffff;
+}
+
 .sf2-row input[type="text"] {
   flex: 1;
   min-width: 0;
