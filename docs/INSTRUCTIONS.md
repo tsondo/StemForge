@@ -176,22 +176,35 @@ StemForge server runs elsewhere.
    click **Request access** and allow the browser's MIDI permission prompt —
    once granted, the button disappears and the panel shows the port count.
    The port list updates automatically when you plug or unplug interfaces.
-2. Each stem card gains a **MIDI Out** row: pick a port and channel, then
-   click **Send**. The FluidSynth **Play** preview is a separate transport —
-   both can run at once, and Send never touches the waveform.
-3. Two cards can play simultaneously on different ports or channels (e.g.
-   bass → one synth, melody → another). Starting a Send on a port+channel
+2. Each stem card gains a **MIDI Out** row whose dropdown chooses where that
+   card plays. **SoftSynth** (the default) is the built-in FluidSynth
+   preview through your browser; picking a hardware port sends to that synth
+   instead. There is only ever one destination, so the soft synth and your
+   hardware can never sound at the same time.
+3. The card's own **Play** button is the transport. Select a port and it
+   becomes **Send**. Stop and Rewind work the same either way, and pressing
+   the button again pauses — the next press resumes from where you left off.
+4. The waveform behaves identically for both destinations: the cursor tracks
+   playback, and clicking it seeks. When seeking on hardware, a note that was
+   already sounding across the click point is *not* re-triggered — playback
+   picks up from the next note that starts after it.
+5. Two cards can play simultaneously on different ports or channels (e.g.
+   bass → one synth, melody → another). Starting a card on a port+channel
    that is already playing stops the previous card first.
-4. **Send Program Change** (off by default) transmits the card's instrument
-   selection as a GM Program Change before playback. Leave it off to keep
-   whatever patch you have dialled in on the synth. Drum stems never send
-   Program Change, and the channel is always your dropdown choice — channel
-   10 is not forced for drums.
-5. **Stop** on the card silences that stem; **Panic** in the left column
-   silences every known port on all 16 channels at any time.
-6. Port and channel choices are remembered per stem label across sessions
-   (matched by port name; if the interface isn't connected, the selection
-   falls back to None).
+6. **Channel** and **Send Program Change** apply only to hardware, so they're
+   greyed out under SoftSynth. Program Change (off by default) transmits the
+   card's instrument selection as a GM Program Change before playback; leave
+   it off to keep whatever patch you have dialled in on the synth. Drum stems
+   never send Program Change, and the channel is always your dropdown choice
+   — channel 10 is not forced for drums.
+7. **Panic** in the left column silences every known port on all 16 channels
+   at any time, whatever any card is doing.
+8. Port and channel choices are remembered per stem label across sessions
+   (matched by port name; if that interface isn't connected, the card falls
+   back to SoftSynth so it still previews).
+
+The merged-MIDI row is the one exception to the single-transport rule: it has
+no card and no waveform of its own, so it keeps a dedicated Send/Stop pair.
 
 Edits made with Clean Up or Transpose while a card is playing take effect on
 the next Send — hardware keeps playing the pre-edit snapshot until then.
