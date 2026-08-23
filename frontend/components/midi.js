@@ -6,7 +6,7 @@
 import { appState, api, pollJob, el, formatTime, saveFileAs } from '../app.js';
 import { createWaveform } from './waveform.js';
 import { transportLoad, transportStop } from './audio-player.js';
-import { isSupported as webMidiSupported, initWebMidi, getOutputs, onPortsChanged, panicAll } from './webmidi.js';
+import { isSupported as webMidiSupported, initWebMidi, getOutputs, onPortsChanged, createScheduler, panicAll } from './webmidi.js';
 
 function clearChildren(elem) {
   while (elem.firstChild) elem.removeChild(elem.firstChild);
@@ -30,6 +30,13 @@ const midiPlayers = [];
 /** Web MIDI output state — access granted, and card-row refresh hooks. */
 let midiOutReady = false;
 const midiOutRefreshers = [];  // each cb receives getOutputs() on any port change
+
+/**
+ * Active per-card hardware schedulers, mirroring the midiPlayers /
+ * stopOtherPlayers convention. Exclusivity is per port+channel only:
+ * two cards on different ports (modwave + wavestate) play simultaneously.
+ */
+const _outSchedulers = [];
 
 function stopOtherPlayers(except) {
   for (const p of midiPlayers) {
@@ -562,6 +569,9 @@ async function handleMidiImport() {
 function showMidiResults(result) {
   const container = document.getElementById('midi-results');
   midiPlayers.length = 0;
+  // Old cards are about to be superseded — silence their hardware sends.
+  for (const entry of _outSchedulers) entry.stopPlayback();
+  _outSchedulers.length = 0;
 
   appState.midiLabels = result.labels || [];
   appState.midiHasMerged = !!result.has_merged;
@@ -636,6 +646,10 @@ function showMidiResults(result) {
     mergedRow.appendChild(sheetAllBtn);
 
     container.appendChild(mergedRow);
+    // The merged MIDI gets hardware output too — same visibility rule as
+    // the Save controls. All instruments play on the row's single
+    // port/channel; per-instrument routing is deferred.
+    container.appendChild(buildMidiOutRow('merged'));
   }
 
   // Per-stem result cards with full playback
@@ -715,6 +729,142 @@ function buildMidiOutSection() {
 }
 
 /**
+ * Build a per-card MIDI Out row: port/channel selects, Send/Stop, status.
+ * The hardware scheduler is a separate transport from the FluidSynth
+ * preview — Send never touches the waveform and vice versa, by design.
+ */
+function buildMidiOutRow(label) {
+  const portSelect = el('select', { className: 'midi-out-select midi-out-port' });
+  const channelSelect = el('select', { className: 'midi-out-select' });
+  for (let c = 1; c <= 16; c++) {
+    channelSelect.appendChild(el('option', { value: String(c) }, `Ch ${c}`));
+  }
+  const sendBtn = el('button', { className: 'btn btn-sm', disabled: 'true' }, '▶ Send');
+  const outStopBtn = el('button', { className: 'btn btn-sm', disabled: 'true' }, '■ Stop');
+  const outStatus = el('span', { className: 'midi-out-status text-dim' });
+  const row = el('div', { className: 'midi-out-row' },
+    el('label', { className: 'text-dim' }, 'MIDI Out:'),
+    portSelect, channelSelect, sendBtn, outStopBtn, outStatus,
+  );
+
+  // A dead control is worse than no control.
+  if (!window.isSecureContext || !webMidiSupported()) {
+    row.classList.add('hidden');
+    return row;
+  }
+
+  let sched = null;
+
+  function syncSendState() {
+    if (midiOutReady && portSelect.value) sendBtn.removeAttribute('disabled');
+    else sendBtn.setAttribute('disabled', 'true');
+  }
+
+  function refreshPortOptions(outputs) {
+    const prev = portSelect.value;
+    clearChildren(portSelect);
+    portSelect.appendChild(el('option', { value: '' }, 'None'));
+    for (const o of outputs) {
+      portSelect.appendChild(el('option', { value: o.id, title: o.name }, o.name));
+    }
+    portSelect.value = Array.from(portSelect.options).some(op => op.value === prev) ? prev : '';
+    syncSendState();
+  }
+
+  function resetUi(msg) {
+    outStopBtn.setAttribute('disabled', 'true');
+    outStatus.textContent = msg;
+    syncSendState();
+  }
+
+  function stopPlayback(msg = '') {
+    if (sched) sched.stop();
+    sched = null;
+    entry.sched = null;
+    resetUi(msg);
+  }
+
+  const entry = { sched: null, stopPlayback };
+  _outSchedulers.push(entry);
+
+  async function startSend() {
+    const portId = portSelect.value;
+    const channel = parseInt(channelSelect.value, 10);
+    if (!portId) return;
+
+    sendBtn.setAttribute('disabled', 'true');
+    outStatus.textContent = 'Loading events…';
+    let data;
+    try {
+      data = await api('/midi/events', {
+        method: 'POST',
+        body: JSON.stringify({ stem_label: label }),
+      });
+    } catch (err) {
+      resetUi(`Failed: ${err.message}`);
+      return;
+    }
+
+    // Merge all tracks into one flat array, re-sorted with the backend's
+    // comparator (ascending t, off before on at equal t) — per-track
+    // ordering does not survive concatenation, and losing the tie-break
+    // would break the abutting-note guarantee.
+    const events = [];
+    for (const track of data.tracks) events.push(...track.events);
+    events.sort((a, b) =>
+      a.t - b.t || (a.type === b.type ? 0 : a.type === 'off' ? -1 : 1));
+
+    // Exclusivity: stop other schedulers on the same port AND channel only.
+    for (const other of _outSchedulers) {
+      if (other !== entry && other.sched && other.sched.isPlaying()
+          && other.sched.outputId === portId && other.sched.channel === channel) {
+        other.stopPlayback();
+      }
+    }
+    stopPlayback();  // our own previous run, whatever port it was on
+
+    try {
+      sched = createScheduler(portId, channel);
+    } catch (err) {
+      resetUi('Port unavailable');
+      return;
+    }
+    entry.sched = sched;
+
+    const duration = data.duration;
+    const truncNote = data.truncated ? ' — truncated, run Clean Up' : '';
+    sched.onTick((sec) => {
+      outStatus.textContent =
+        `Playing ${formatTime(Math.min(sec, duration))} / ${formatTime(duration)}${truncNote}`;
+    });
+    sched.onFinish(() => {
+      sched = null;
+      entry.sched = null;
+      resetUi('');
+    });
+    sched.onError(() => {
+      sched = null;
+      entry.sched = null;
+      resetUi('Port disconnected');
+    });
+    sched.play(events);
+    outStopBtn.removeAttribute('disabled');
+    syncSendState();
+  }
+
+  sendBtn.addEventListener('click', startSend);
+  outStopBtn.addEventListener('click', () => stopPlayback());
+  // Port/channel changes during playback take effect on the next Send —
+  // the scheduler's binding is fixed at creation, deliberately.
+  portSelect.addEventListener('change', syncSendState);
+
+  midiOutRefreshers.push(refreshPortOptions);
+  refreshPortOptions(getOutputs());
+
+  return row;
+}
+
+/**
  * Build a MIDI result card with waveform, playback controls, and instrument selector.
  * Mirrors the stem cards in the Separate tab.
  */
@@ -773,6 +923,9 @@ function buildMidiCard(label, info) {
     instrumentSelect,
   );
 
+  // MIDI Out row — hardware output, independent of the FluidSynth preview
+  const midiOutRow = buildMidiOutRow(label);
+
   // Waveform container (initially empty — populated on first render)
   const waveContainer = el('div', { className: 'stem-waveform' });
   const renderHint = el('div', { className: 'midi-render-hint text-dim' }, 'Press Play to render audio preview');
@@ -830,7 +983,7 @@ function buildMidiCard(label, info) {
   // Sheet music panel placeholder
   const sheetPanel = el('div', { className: 'sheet-music-panel hidden' });
 
-  card.append(header, instrumentRow, waveContainer, renderHint, toolsRow, sheetPanel);
+  card.append(header, instrumentRow, midiOutRow, waveContainer, renderHint, toolsRow, sheetPanel);
   container.appendChild(card);
 
   // ─── MIDI Tools event handlers ───

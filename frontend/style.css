@@ -594,6 +594,40 @@ input[type="range"]::-moz-range-track {
   gap: 8px;
 }
 
+.midi-out-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+}
+
+.midi-out-row label {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.midi-out-select {
+  font-size: 12px;
+  padding: 3px 6px;
+  background: var(--surface-raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.midi-out-port {
+  min-width: 180px;
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.midi-out-status {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .btn-panic {
   border-color: var(--error);
   color: var(--error);
