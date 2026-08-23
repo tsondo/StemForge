@@ -160,6 +160,7 @@ macOS is not affected (jemalloc injection is Linux-only).
 - **NVIDIA GPU** with driver **580+** (required for CUDA 13.0 runtime)
 - Check your driver version: `nvidia-smi` → top-right shows "Driver Version"
 - PyTorch 2.10.0+cu130 (pinned) will use the GPU automatically — no CUDA toolkit install needed
+- **AMD GPU** users: see [AMD GPU Support (ROCm)](#amd-gpu-support-rocm) below — a separate pyproject variant is required
 - CPU-only works but is significantly slower for all pipelines
 
 ### WSL (Windows Subsystem for Linux)
@@ -207,6 +208,73 @@ Add the `export` line to your `~/.zshrc` so it persists across sessions.
 
 MPS acceleration is used automatically when available (Apple Silicon).
 Expect significantly faster inference than CPU-only, but slower than CUDA on a discrete GPU.
+
+---
+
+## AMD GPU Support (ROCm)
+
+AMD GPUs are supported on Linux through a separate pyproject variant that pulls
+PyTorch from the ROCm wheel index.
+
+> **Status: untested on real hardware.** The dependency graph is verified on
+> every CI run (the `rocm-resolve` job), but no one has yet run StemForge on an
+> AMD GPU end to end. Tracked in issue #11 — reports welcome.
+
+### Setup
+
+**Step 1** — Install a working [ROCm 7.1 runtime](https://rocm.docs.amd.com)
+and confirm the GPU is visible:
+
+    rocminfo | grep gfx
+
+**Step 2** — Copy the ROCm pyproject file before installing:
+
+    cp pyproject.toml.ROCM pyproject.toml
+    uv sync
+
+The committed `uv.lock` is pinned to the CUDA wheel index, so this first sync
+re-resolves the whole graph rather than installing from the lock. It takes a
+while and downloads several GB of ROCm wheels. Afterwards `pyproject.toml` and
+`uv.lock` will both show as modified in git — that is expected from the `cp`
+workflow. **Do not commit them**; the repo's committed pair is the CUDA one.
+
+**Step 3** — Install FluidSynth as for any Linux install, then run normally:
+
+    uv run stemforge
+
+### What runs on the GPU
+
+Everything built on PyTorch uses the ROCm GPU: Demucs and BS-Roformer
+separation, Stable Audio Open generation, AceStep composition and LoRA
+training, CREPE auto-tune, the neural compressor, and RVC voice conversion.
+PyTorch's ROCm build presents itself as CUDA (`torch.cuda.is_available()`
+returns true and HIP translates the calls), so no code changes are needed for
+AMD — unlike Apple Silicon, which needs explicit MPS handling.
+
+Two things stay on the CPU in this variant, by design rather than by fault:
+
+- **Enhance → Clean Up** (UVR denoise/dereverb) — runs through `onnxruntime`
+- **Lyrics transcription and Vocal MIDI** (faster-whisper) — runs through `ctranslate2`
+
+Note that AceStep's language model uses SDPA attention rather than
+`flash-attn` here — but that is **not** an AMD-specific penalty. The prebuilt
+`flash-attn` wheels are marker-pinned to Python 3.11 and StemForge requires
+3.12, so the SDPA path is what every StemForge install uses, CUDA included.
+
+### Notes
+
+- **Selecting a GPU:** `--gpu N` sets both `CUDA_VISIBLE_DEVICES` and
+  `HIP_VISIBLE_DEVICES` on the AceStep subprocess, so it works on AMD and
+  NVIDIA alike.
+- **AceStep needs no separate setup.** It runs in StemForge's own virtualenv
+  (the subprocess is launched with the same interpreter), so it inherits the
+  ROCm PyTorch installed above.
+- **The `Ace-Step-Wrangler` submodule is not ROCm-ready when run standalone.**
+  Its own pyproject pins CUDA wheel indexes and requires a prebuilt CUDA
+  `flash-attn` wheel, which has no ROCm equivalent. Run AceStep through
+  StemForge on AMD hardware.
+- **MIDI Out** (MIDI tab) is unaffected by any of this — Web MIDI runs entirely
+  in the browser and touches no GPU code.
 
 ---
 
@@ -412,6 +480,7 @@ All pipelines and the full web UI are implemented and working:
 - Waveform visualization via wavesurfer.js with global transport bar
 - Deterministic uv environment, Python 3.12, CUDA 13.0 wheels
 - macOS support via MPS acceleration (separate `pyproject.toml.MAC`)
+- AMD GPU support via ROCm 7.1 wheels (separate `pyproject.toml.ROCM`) — resolution-verified in CI, untested on hardware
 
 StemForge is evolving into a musical playground where you can regenerate and remix any part of any song.
 
@@ -423,6 +492,7 @@ StemForge is evolving into a musical playground where you can regenerate and rem
     ├── run.py                          # Launcher: uvicorn + AceStep subprocess management
     ├── pyproject.toml
     ├── pyproject.toml.MAC              # macOS variant (MPS, no CUDA index)
+    ├── pyproject.toml.ROCM             # AMD variant (ROCm 7.1 torch index)
     │
     ├── Ace-Step-Wrangler/              # Git submodule (independently runnable)
     │   ├── vendor/ACE-Step-1.5/        # Nested submodule — upstream AceStep

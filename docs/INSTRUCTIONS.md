@@ -10,6 +10,24 @@ Drag and drop any audio file (WAV, FLAC, MP3, OGG, AIFF) or video file (MP4, MKV
 
 The waveform appears in the transport bar at the bottom of the page. Use the play/pause button there to audition the file at any time. Once a file is loaded, the Separate tab becomes active.
 
+### 1.1 · Platform notes
+
+StemForge runs the same way on every platform; only the speed of individual
+pipelines changes. Setup for each variant is in the README.
+
+- **NVIDIA (CUDA)** — the default. Every pipeline is GPU-accelerated.
+- **AMD (ROCm)** — install with the `pyproject.toml.ROCM` variant. All the
+  PyTorch pipelines (Separate, Synth, Compose, Tune, Effects, Voice) use the
+  GPU. Two things run on the CPU and will feel slow, which is expected rather
+  than a fault: **Enhance → Clean Up** (onnxruntime) and **Lyrics
+  transcription / Vocal MIDI** (faster-whisper/ctranslate2). Still untested
+  on real hardware — see issue #11.
+- **Apple Silicon (MPS)** — install with the `pyproject.toml.MAC` variant.
+  Faster than CPU, slower than a discrete GPU. `mdx_extra_q` is hidden and
+  BasicPitch MIDI extraction is unavailable.
+
+**MIDI Out** (section 4.2) is browser-side and behaves identically everywhere.
+
 ---
 
 ## 2. Separate — Stem Separation

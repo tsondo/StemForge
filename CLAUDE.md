@@ -62,6 +62,7 @@ StemForge/
 ├── run.py                          # Launcher: uvicorn + AceStep subprocess management
 ├── pyproject.toml
 ├── pyproject.toml.MAC              # macOS variant (MPS, no CUDA index)
+├── pyproject.toml.ROCM             # AMD variant (ROCm 7.1 torch index)
 │
 ├── Ace-Step-Wrangler/              # Git submodule (independently runnable)
 │   ├── vendor/ACE-Step-1.5/        # Nested submodule — upstream AceStep
@@ -407,6 +408,11 @@ AceStep runs as a separate process, spawned lazily on first use (`POST
 - **Linux (primary)**: CUDA 13.0 wheels, uv sync, Python 3.12
 - **macOS (Apple Silicon)**: MPS acceleration via `pyproject.toml.MAC`; use `from utils.device import get_device`, never hardcode `"cuda"`
 - **AMD (ROCm)**: `pyproject.toml.ROCM` — rocm7.1 torch index, same pins; resolution-verified but untested on hardware (issue #11)
+  - ROCm's torch presents as CUDA (`torch.cuda.is_available()` is true, HIP translates), so hardcoded `"cuda"` is *not* a ROCm bug — the `get_device` rule exists for MPS
+  - Installing overwrites `pyproject.toml` and re-resolves `uv.lock` (the committed lock is cu130); both show dirty afterwards and must not be committed
+  - AceStep needs no separate ROCm setup: `acestep_state.launch()` spawns it with `sys.executable`, so it inherits this venv's torch. Its cu128 pins are neutralized by `override-dependencies` + `[tool.uv.sources]` in the ROCM pyproject
+  - CPU-bound in this variant: UVR enhance (onnxruntime) and faster-whisper (ctranslate2). AceStep's LM is *not* an AMD regression — the prebuilt flash-attn wheels are marker-pinned to Python 3.11 and the project requires 3.12, so every platform (CUDA included) already runs the SDPA path
+  - `Ace-Step-Wrangler` **standalone** is CUDA-only (its own pyproject pins cu128 indexes + a prebuilt CUDA flash-attn wheel); ROCm users must run AceStep through StemForge
 - **FluidSynth**: Required for MIDI preview and Mix tab; GM soundfont auto-discovered
 - **CI**: GitHub Actions (`.github/workflows/ci.yml`) — lock drift check, ROCm resolve-only check, and a CPU test job on every PR/push; Dependabot updates action versions and submodule pointers weekly
 
