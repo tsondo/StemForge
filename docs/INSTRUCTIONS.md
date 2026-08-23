@@ -145,6 +145,54 @@ In Lyrics mode:
 
 Click **Send to Compose** on the result card to import the lyrics into the Compose tab's "My Lyrics" textarea (you'll be asked before any existing text is replaced).
 
+### 4.2 · MIDI Out — playing stems on hardware synths
+
+Every extracted or imported MIDI stem can be streamed directly to a hardware
+synthesizer over the browser's Web MIDI API — no drivers or extra software.
+The MIDI port lives on the **browser's** machine, so this works even when the
+StemForge server runs elsewhere.
+
+**Usage:**
+
+1. The **MIDI Out** panel in the left column shows port status. On first use
+   click **Request access** and allow the browser's MIDI permission prompt —
+   once granted, the button disappears and the panel shows the port count.
+   The port list updates automatically when you plug or unplug interfaces.
+2. Each stem card gains a **MIDI Out** row: pick a port and channel, then
+   click **Send**. The FluidSynth **Play** preview is a separate transport —
+   both can run at once, and Send never touches the waveform.
+3. Two cards can play simultaneously on different ports or channels (e.g.
+   bass → one synth, melody → another). Starting a Send on a port+channel
+   that is already playing stops the previous card first.
+4. **Send Program Change** (off by default) transmits the card's instrument
+   selection as a GM Program Change before playback. Leave it off to keep
+   whatever patch you have dialled in on the synth. Drum stems never send
+   Program Change, and the channel is always your dropdown choice — channel
+   10 is not forced for drums.
+5. **Stop** on the card silences that stem; **Panic** in the left column
+   silences every known port on all 16 channels at any time.
+6. Port and channel choices are remembered per stem label across sessions
+   (matched by port name; if the interface isn't connected, the selection
+   falls back to None).
+
+Edits made with Clean Up or Transpose while a card is playing take effect on
+the next Send — hardware keeps playing the pre-edit snapshot until then.
+
+**Browser support:** Chrome and Edge implement Web MIDI. Firefox gates it
+behind a site-permission add-on flow and is not supported; the panel will
+tell you when the browser lacks Web MIDI.
+
+**Secure context:** Web MIDI requires HTTPS or localhost. Opening StemForge
+at `http://localhost:8765` works; a plain `http://` LAN address does not.
+For LAN use, either serve StemForge behind an HTTPS reverse proxy, or (for
+single-machine testing only) add the origin to Chrome's
+`chrome://flags/#unsafely-treat-insecure-origin-as-secure` flag.
+
+**Ports missing? (Linux/ALSA port contention):** ALSA sequencer ports held
+exclusively by another application will not appear in the browser. Close any
+DAW or sequencer that has the device open, then check `aconnect -l` to
+confirm the device is visible to ALSA before looking for it in StemForge.
+
 ---
 
 ## 5. Synth — Audio Generation & SFX Stem Builder

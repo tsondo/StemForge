@@ -315,6 +315,26 @@ _Add future feature ideas below this line._
 - Export stems + MIDI in a format that opens directly as a DAW project
   (e.g., Reaper project file, Ableton Live Set via ALS XML)
 - Alternatively, a VST plugin wrapper for real-time stem separation
+- Hardware MIDI output is already live (MIDI tab → MIDI Out, Web MIDI) —
+  see `docs/WEB_MIDI_OUT_SPEC.md`; the items below are its deferred follow-ups
+
+### Web MIDI follow-ups (deferred from the MIDI Out feature)
+- **MIDI input** — record a hardware performance into StemForge as a new
+  MIDI track, or as an alternative to BasicPitch extraction. The Web MIDI
+  access plumbing in `frontend/components/webmidi.js` is reusable; the
+  harder part is the return leg, since StemForge has no audio capture path.
+  Needs its own spec.
+- **Transport sync** — MIDI Clock / MTC / MMC so hardware follows the
+  transport bar (meaningful only once there is a unified timeline).
+- **Pitch bend and CC** — carry `PrettyMIDI.pitch_bends` and
+  `control_changes` through `/api/midi/events`; waiting on a pipeline that
+  actually produces them. The response shape has room for `bend`/`cc`
+  event types without a breaking change.
+- **Multi-port merged playback** — route each instrument of the merged
+  MIDI to a different port/channel from a single card; the `tracks[]`
+  response shape already supports it.
+- **Seek / start-from-playhead** — a `startSec` argument to `play()` plus
+  a rule for notes already sounding at the seek point.
 
 ### Improved audio generation
 - Evaluate newer open-source generation models as they emerge
