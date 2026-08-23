@@ -652,6 +652,17 @@ input[type="range"]::-moz-range-track {
   cursor: pointer;
 }
 
+/* Channel + Program Change mean nothing under SoftSynth routing. */
+.text-disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
+.midi-out-select:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+
 .btn-panic {
   border-color: var(--error);
   color: var(--error);

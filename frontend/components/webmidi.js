@@ -20,8 +20,11 @@
 
 const LOOKAHEAD_MS = 250;  // how far ahead of the cursor events are queued
 const TICK_MS = 100;       // worker metronome period
-const LEAD_MS = 120;       // startup delay before t=0, absorbs first-tick jitter
 const FLUSH_MS = LOOKAHEAD_MS + 50;  // second-phase stop margin
+
+/** Startup delay before t=0, absorbing first-tick jitter. Exported so the
+ *  UI can delay the waveform cursor by the same amount and stay in step. */
+export const LEAD_MS = 120;
 
 let midiAccess = null;
 const portListeners = [];
@@ -132,6 +135,38 @@ if (typeof window !== 'undefined') {
 // ─── Scheduler ───────────────────────────────────────────────────────────
 
 /**
+ * Slice an event array to start at `startSec`.
+ *
+ * A note already sounding at the seek point is skipped rather than
+ * re-triggered from the middle of its envelope — right for a pad, clearly
+ * wrong for anything plucked. That leaves its note-off orphaned in the
+ * remaining stream, and a bare off would cut a note the player happens to
+ * be holding on the keyboard, so orphaned offs are dropped too. A
+ * re-trigger of the same pitch clears the flag, keeping its own off.
+ */
+function sliceFrom(evts, startSec) {
+  if (startSec <= 0) return evts;
+  const hanging = new Set();  // sounding at startSec, note-off still ahead
+  let i = 0;
+  for (; i < evts.length && evts[i].t < startSec; i++) {
+    const e = evts[i];
+    if (e.type === 'on') hanging.add(e.note);
+    else hanging.delete(e.note);
+  }
+  if (!hanging.size) return evts.slice(i);
+  const out = [];
+  for (; i < evts.length; i++) {
+    const e = evts[i];
+    if (hanging.has(e.note)) {
+      hanging.delete(e.note);
+      if (e.type === 'off') continue;
+    }
+    out.push(e);
+  }
+  return out;
+}
+
+/**
  * Create a scheduler bound to one output port and one channel (1-16).
  * Port and channel are fixed for the scheduler's lifetime — changing a
  * dropdown mid-playback takes effect on the next Send, by design.
@@ -195,20 +230,26 @@ export function createScheduler(outputId, channel) {
 
     /**
      * Begin streaming a flat event array ({t, type, note, vel}, sorted
-     * ascending, off-before-on at equal t) from t=0.
+     * ascending, off-before-on at equal t).
      * opts.program: GM program 0-127 to send once before the first note
      * (the Program Change checkbox) — omit/null to leave the patch alone.
+     * opts.startSec: seek position in seconds (default 0). Notes already
+     * sounding there are skipped — see sliceFrom(). A startSec past the
+     * last event is legal and finishes immediately.
      */
     play(evts, opts = {}) {
       if (playing) scheduler.stop();
-      events = evts;
+      const startSec = Math.max(0, opts.startSec || 0);
+      events = sliceFrom(evts, startSec);
       cursor = 0;
       sounding.clear();
       ensureClock();
       if (opts.program != null) {
         output.send([0xC0 | ch, opts.program & 0x7f]);
       }
-      originMs = performance.now() + LEAD_MS;
+      // Shifting the origin back by startSec keeps every downstream
+      // `originMs + e.t * 1000` calculation working unchanged.
+      originMs = performance.now() + LEAD_MS - startSec * 1000;
       playing = true;
       tickSubscribers.add(tick);
       activeSchedulers.add(scheduler);

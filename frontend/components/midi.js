@@ -6,7 +6,7 @@
 import { appState, api, pollJob, el, formatTime, saveFileAs } from '../app.js';
 import { createWaveform } from './waveform.js';
 import { transportLoad, transportStop } from './audio-player.js';
-import { isSupported as webMidiSupported, initWebMidi, getOutputs, onPortsChanged, createScheduler, panicAll } from './webmidi.js';
+import { isSupported as webMidiSupported, initWebMidi, getOutputs, onPortsChanged, createScheduler, panicAll, LEAD_MS } from './webmidi.js';
 
 function clearChildren(elem) {
   while (elem.firstChild) elem.removeChild(elem.firstChild);
@@ -672,8 +672,10 @@ function showMidiResults(result) {
     container.appendChild(mergedRow);
     // The merged MIDI gets hardware output too — same visibility rule as
     // the Save controls. All instruments play on the row's single
-    // port/channel; per-instrument routing is deferred.
-    container.appendChild(buildMidiOutRow('merged'));
+    // port/channel; per-instrument routing is deferred. It is the one row
+    // that keeps its own Send/Stop: there is no merged card, so it has no
+    // transport to borrow and no waveform to follow.
+    container.appendChild(buildMidiOutRow('merged', { standalone: true }).row);
   }
 
   // Per-stem result cards with full playback
@@ -753,22 +755,27 @@ function buildMidiOutSection() {
 }
 
 /**
- * Build a per-card MIDI Out row: port/channel selects, Send/Stop, status.
- * The hardware scheduler is a separate transport from the FluidSynth
- * preview — Send never touches the waveform and vice versa, by design.
+ * Build a per-card MIDI Out row — routing only. The card's own
+ * Play/Stop/Rewind drive whichever destination `portSelect` names, so the
+ * row deliberately carries no transport buttons (spec rev. 3): with two
+ * sets of buttons a user could sound the soft synth and the hardware at
+ * once, which is never wanted.
  *
- * getProgram: () => GM program 0-127, or null when nothing sendable is
- * selected (Drum Kit). Omitted for the merged row, which has no
- * instrument selector — its checkbox is not rendered.
+ * opts.getProgram: () => GM program 0-127, or null when nothing sendable
+ *   is selected (Drum Kit).
+ * opts.standalone: render the row's own Send/Stop pair. Used only by the
+ *   merged row, which has no card and therefore no transport to borrow.
+ *
+ * Returns a controller the card wires its transport to.
  */
-function buildMidiOutRow(label, getProgram) {
+function buildMidiOutRow(label, opts = {}) {
+  const { getProgram = null, standalone = false } = opts;
+
   const portSelect = el('select', { className: 'midi-out-select midi-out-port' });
   const channelSelect = el('select', { className: 'midi-out-select' });
   for (let c = 1; c <= 16; c++) {
     channelSelect.appendChild(el('option', { value: String(c) }, `Ch ${c}`));
   }
-  const sendBtn = el('button', { className: 'btn btn-sm', disabled: 'true' }, '▶ Send');
-  const outStopBtn = el('button', { className: 'btn btn-sm', disabled: 'true' }, '■ Stop');
   // Off by default: the instrument dropdown selects a FluidSynth patch, and
   // silently overwriting whatever the user dialled in on their synth would
   // be hostile. Drum stems never send PC even when checked — GM percussion
@@ -777,38 +784,70 @@ function buildMidiOutRow(label, getProgram) {
   const progChangeLabel = el('label', { className: 'text-dim midi-out-pc-label' },
     progChangeBox, 'Send Program Change');
   const outStatus = el('span', { className: 'midi-out-status text-dim' });
+
+  const sendBtn = standalone
+    ? el('button', { className: 'btn btn-sm', disabled: 'true' }, '▶ Send') : null;
+  const outStopBtn = standalone
+    ? el('button', { className: 'btn btn-sm', disabled: 'true' }, '■ Stop') : null;
+
   const row = el('div', { className: 'midi-out-row' },
     el('label', { className: 'text-dim' }, 'MIDI Out:'),
     portSelect, channelSelect, sendBtn, outStopBtn, progChangeLabel, outStatus,
   );
   if (!getProgram) progChangeLabel.classList.add('hidden');
 
-  // A dead control is worse than no control.
+  const ctl = {
+    row,
+    isHardware: () => false,
+    isPlaying: () => false,
+    start: async () => false,
+    stop: () => {},
+    invalidate: () => {},
+    onRoutingChange: () => {},
+    onFinish: () => {},
+    onError: () => {},
+  };
+
+  // A dead control is worse than no control. With Web MIDI unavailable the
+  // card behaves exactly as it did before this feature existed.
   if (!window.isSecureContext || !webMidiSupported()) {
     row.classList.add('hidden');
-    return row;
+    return ctl;
   }
 
   let sched = null;
+  let cache = null;      // {events, duration, truncated, isDrum} — cleared on edit
+  let routingCb = null;
+  let finishCb = null;
+  let errorCb = null;
 
   // Saved preference for this stem — the channel applies immediately, the
   // port by name-match once ports are known. Auto-restore stops as soon as
-  // the user touches the port dropdown, so an explicit "None" sticks.
+  // the user touches the port dropdown, so an explicit SoftSynth sticks.
   const pref = loadMidiOutPrefs()[label] || null;
   let autoRestorePort = !!(pref && pref.port);
   if (pref && pref.channel >= 1 && pref.channel <= 16) {
     channelSelect.value = String(pref.channel);
   }
 
-  function syncSendState() {
-    if (midiOutReady && portSelect.value) sendBtn.removeAttribute('disabled');
-    else sendBtn.setAttribute('disabled', 'true');
+  /** Channel and Program Change mean nothing to the FluidSynth render. */
+  function syncRoutingState() {
+    const hw = !!portSelect.value;
+    channelSelect.disabled = !hw;
+    progChangeBox.disabled = !hw;
+    progChangeLabel.classList.toggle('text-disabled', !hw);
+    if (sendBtn) {
+      if (midiOutReady && hw) sendBtn.removeAttribute('disabled');
+      else sendBtn.setAttribute('disabled', 'true');
+    }
   }
 
   function refreshPortOptions(outputs) {
     const prev = portSelect.value;
     clearChildren(portSelect);
-    portSelect.appendChild(el('option', { value: '' }, 'None'));
+    // Not "None" — this entry routes to FluidSynth, a real destination.
+    portSelect.appendChild(el('option', { value: '' },
+      standalone ? 'None' : 'SoftSynth'));
     for (const o of outputs) {
       portSelect.appendChild(el('option', { value: o.id, title: o.name }, o.name));
     }
@@ -820,7 +859,8 @@ function buildMidiOutRow(label, getProgram) {
     } else {
       portSelect.value = '';
     }
-    syncSendState();
+    syncRoutingState();
+    if (routingCb) routingCb();
   }
 
   function savePref() {
@@ -830,40 +870,25 @@ function buildMidiOutRow(label, getProgram) {
       parseInt(channelSelect.value, 10));
   }
 
-  function resetUi(msg) {
-    outStopBtn.setAttribute('disabled', 'true');
-    outStatus.textContent = msg;
-    syncSendState();
-  }
-
   function stopPlayback(msg = '') {
     if (sched) sched.stop();
     sched = null;
     entry.sched = null;
-    resetUi(msg);
+    if (outStopBtn) outStopBtn.setAttribute('disabled', 'true');
+    outStatus.textContent = msg;
+    syncRoutingState();
   }
 
   const entry = { sched: null, stopPlayback };
   _outSchedulers.push(entry);
 
-  async function startSend() {
-    const portId = portSelect.value;
-    const channel = parseInt(channelSelect.value, 10);
-    if (!portId) return;
-
-    sendBtn.setAttribute('disabled', 'true');
-    outStatus.textContent = 'Loading events…';
-    let data;
-    try {
-      data = await api('/midi/events', {
-        method: 'POST',
-        body: JSON.stringify({ stem_label: label }),
-      });
-    } catch (err) {
-      resetUi(`Failed: ${err.message}`);
-      return;
-    }
-
+  /** Fetch + flatten the event stream, cached until the MIDI is edited. */
+  async function loadEvents() {
+    if (cache) return cache;
+    const data = await api('/midi/events', {
+      method: 'POST',
+      body: JSON.stringify({ stem_label: label }),
+    });
     // Merge all tracks into one flat array, re-sorted with the backend's
     // comparator (ascending t, off before on at equal t) — per-track
     // ordering does not survive concatenation, and losing the tie-break
@@ -872,6 +897,28 @@ function buildMidiOutRow(label, getProgram) {
     for (const track of data.tracks) events.push(...track.events);
     events.sort((a, b) =>
       a.t - b.t || (a.type === b.type ? 0 : a.type === 'off' ? -1 : 1));
+    cache = {
+      events,
+      duration: data.duration,
+      truncated: data.truncated,
+      isDrum: data.tracks.some((tr) => tr.is_drum),
+    };
+    return cache;
+  }
+
+  async function start(startSec = 0) {
+    const portId = portSelect.value;
+    const channel = parseInt(channelSelect.value, 10);
+    if (!portId) return false;
+
+    if (sendBtn) sendBtn.setAttribute('disabled', 'true');
+    let data;
+    try {
+      data = await loadEvents();
+    } catch (err) {
+      stopPlayback(`Failed: ${err.message}`);
+      return false;
+    }
 
     // Exclusivity: stop other schedulers on the same port AND channel only.
     for (const other of _outSchedulers) {
@@ -885,8 +932,8 @@ function buildMidiOutRow(label, getProgram) {
     try {
       sched = createScheduler(portId, channel);
     } catch (err) {
-      resetUi('Port unavailable');
-      return;
+      stopPlayback('Port unavailable');
+      return false;
     }
     entry.sched = sched;
 
@@ -895,46 +942,60 @@ function buildMidiOutRow(label, getProgram) {
     // and never forcing channel 10 (the channel is the user's choice).
     let program = null;
     if (progChangeBox.checked && getProgram
-        && !isDrumStem(label) && !data.tracks.some((tr) => tr.is_drum)) {
+        && !isDrumStem(label) && !data.isDrum) {
       program = getProgram();
     }
 
-    const duration = data.duration;
-    const truncNote = data.truncated ? ' — truncated, run Clean Up' : '';
-    sched.onTick((sec) => {
-      outStatus.textContent =
-        `Playing ${formatTime(Math.min(sec, duration))} / ${formatTime(duration)}${truncNote}`;
-    });
+    outStatus.textContent = data.truncated ? 'Truncated — run Clean Up' : '';
     sched.onFinish(() => {
       sched = null;
       entry.sched = null;
-      resetUi('');
+      stopPlayback(outStatus.textContent);
+      if (finishCb) finishCb();
     });
     sched.onError(() => {
       sched = null;
       entry.sched = null;
-      resetUi('Port disconnected');
+      stopPlayback('Port disconnected');
+      if (errorCb) errorCb();
     });
-    sched.play(events, { program });
-    outStopBtn.removeAttribute('disabled');
-    syncSendState();
+    sched.play(data.events, { program, startSec });
+    if (outStopBtn) outStopBtn.removeAttribute('disabled');
+    return true;
   }
 
-  sendBtn.addEventListener('click', startSend);
-  outStopBtn.addEventListener('click', () => stopPlayback());
-  // Port/channel changes during playback take effect on the next Send —
-  // the scheduler's binding is fixed at creation, deliberately.
+  if (sendBtn) sendBtn.addEventListener('click', () => start(0));
+  if (outStopBtn) outStopBtn.addEventListener('click', () => stopPlayback());
+
+  // Port/channel changes take effect on the next Send — the scheduler's
+  // binding is fixed at creation, deliberately. Switching routing while
+  // something is playing stops it, so neither destination is left hanging.
   portSelect.addEventListener('change', () => {
     autoRestorePort = false;
+    stopPlayback();
     savePref();
-    syncSendState();
+    syncRoutingState();
+    if (routingCb) routingCb();
   });
-  channelSelect.addEventListener('change', savePref);
+  channelSelect.addEventListener('change', () => {
+    stopPlayback();
+    savePref();
+  });
 
   midiOutRefreshers.push(refreshPortOptions);
   refreshPortOptions(getOutputs());
 
-  return row;
+  Object.assign(ctl, {
+    isHardware: () => !!portSelect.value,
+    isPlaying: () => !!(sched && sched.isPlaying()),
+    start,
+    stop: () => stopPlayback(),
+    invalidate: () => { cache = null; },
+    onRoutingChange: (cb) => { routingCb = cb; },
+    onFinish: (cb) => { finishCb = cb; },
+    onError: (cb) => { errorCb = cb; },
+  });
+  return ctl;
 }
 
 /**
@@ -996,11 +1057,14 @@ function buildMidiCard(label, info) {
     instrumentSelect,
   );
 
-  // MIDI Out row — hardware output, independent of the FluidSynth preview
-  const midiOutRow = buildMidiOutRow(label, () => {
-    const val = instrumentSelect.value;
-    return val === 'drum' ? null : parseInt(val, 10);
+  // MIDI Out row — routing only; the card's transport below drives it.
+  const midiOut = buildMidiOutRow(label, {
+    getProgram: () => {
+      const val = instrumentSelect.value;
+      return val === 'drum' ? null : parseInt(val, 10);
+    },
   });
+  const midiOutRow = midiOut.row;
 
   // Waveform container (initially empty — populated on first render)
   const waveContainer = el('div', { className: 'stem-waveform' });
@@ -1084,6 +1148,7 @@ function buildMidiCard(label, info) {
       transposeLabel.textContent = '0';
       // Re-render waveform with cleaned MIDI
       renderedUrl = null;
+      midiOut.invalidate();
       renderAndLoad(false);
       setTimeout(() => { cleanBtn.textContent = 'Clean Up'; cleanBtn.disabled = false; }, 2000);
     } catch (err) {
@@ -1147,6 +1212,7 @@ function buildMidiCard(label, info) {
       noteCountLabel.textContent = `${label} (${res.note_count} notes)`;
       // Re-render waveform
       renderedUrl = null;
+      midiOut.invalidate();
       renderAndLoad(false);
     } catch (err) {
       alert(`Transpose failed: ${err.message}`);
@@ -1238,13 +1304,23 @@ function buildMidiCard(label, info) {
     });
 
     ws.on('finish', () => {
-      playBtn.textContent = '\u25B6 Play';
-      transportStop();
+      // Under hardware routing this is the muted cursor reaching the end of
+      // the FluidSynth render, which is only approximately the MIDI's end —
+      // it must not be treated as the hardware run finishing.
+      if (!midiOut.isHardware()) transportStop();
+      updateTransportLabel();
     });
 
     ws.on('error', () => {
-      playBtn.textContent = '\u25B6 Play';
       playBtn.disabled = false;
+      updateTransportLabel();
+    });
+
+    // Click-to-seek. 'interaction' fires only for user clicks, never for
+    // our own setTime() calls, so restarting here cannot recurse.
+    ws.on('interaction', (newTime) => {
+      if (!midiOut.isHardware() || !midiOut.isPlaying()) return;
+      hardwareStart(newTime);
     });
   }
 
@@ -1292,10 +1368,73 @@ function buildMidiCard(label, info) {
     }
   }
 
-  // Play button — render on first press or instrument change, then toggle play/pause
-  playBtn.addEventListener('click', () => {
-    const needsRender = !renderedUrl || instrumentSelect.value !== lastProgram;
+  // ─── Transport ───
+  // One button, one destination. The MIDI Out dropdown decides whether it
+  // drives the FluidSynth render or a hardware port; the two can never
+  // sound together (spec rev. 3).
 
+  /** Label the transport button for the current routing and play state. */
+  function updateTransportLabel() {
+    if (midiOut.isHardware()) {
+      playBtn.textContent = midiOut.isPlaying() ? '⏸ Pause' : '▶ Send';
+    } else {
+      playBtn.textContent = (ws && ws.isPlaying()) ? '⏸ Pause' : '▶ Play';
+    }
+  }
+
+  midiOut.onRoutingChange(() => {
+    // The row already stopped any hardware run; stop the browser side too
+    // so neither destination is left sounding, and reset the mute state.
+    if (ws) {
+      if (ws.isPlaying()) ws.pause();
+      ws.setVolume(midiOut.isHardware() ? 0 : 1);
+    }
+    transportStop();
+    updateTransportLabel();
+  });
+  midiOut.onFinish(() => {
+    if (ws) { ws.pause(); ws.setTime(0); }
+    updateTransportLabel();
+  });
+  midiOut.onError(() => {
+    if (ws) ws.pause();
+    updateTransportLabel();
+  });
+
+  /**
+   * Start hardware playback with the waveform running alongside it, muted,
+   * so the cursor moves and click-to-seek keeps working. The waveform
+   * starts LEAD_MS late because the scheduler's origin includes that lead.
+   */
+  async function hardwareStart(startSec) {
+    const ok = await midiOut.start(startSec);
+    updateTransportLabel();
+    if (!ok || !ws) return;
+    ws.setVolume(0);
+    ws.setTime(startSec);
+    setTimeout(() => {
+      if (midiOut.isPlaying() && ws && !ws.isPlaying()) ws.play();
+    }, LEAD_MS);
+  }
+
+  function hardwareStop(rewind) {
+    midiOut.stop();
+    if (ws) {
+      ws.pause();
+      if (rewind) ws.setTime(0);
+    }
+    updateTransportLabel();
+  }
+
+  playBtn.addEventListener('click', async () => {
+    if (midiOut.isHardware()) {
+      // Pause holds position, so the next press resumes from the cursor.
+      if (midiOut.isPlaying()) hardwareStop(false);
+      else await hardwareStart(ws ? ws.getCurrentTime() : 0);
+      return;
+    }
+
+    const needsRender = !renderedUrl || instrumentSelect.value !== lastProgram;
     if (needsRender) {
       renderAndLoad(true);
       return;
@@ -1303,27 +1442,36 @@ function buildMidiCard(label, info) {
 
     if (ws && ws.isPlaying()) {
       ws.pause();
-      playBtn.textContent = '\u25B6 Play';
+      playBtn.textContent = '▶ Play';
     } else if (ws) {
       stopOtherPlayers(ws);
+      ws.setVolume(1);
       ws.play();
-      playBtn.textContent = '\u23F8 Pause';
+      playBtn.textContent = '⏸ Pause';
       transportLoad(renderedUrl, label, false, 'MIDI', { cardWs: ws });
     }
   });
 
   // Stop
   stopBtn.addEventListener('click', () => {
+    if (midiOut.isHardware()) {
+      hardwareStop(true);
+      return;
+    }
     if (ws) {
       ws.stop();
       transportStop();
-      playBtn.textContent = '\u25B6 Play';
+      playBtn.textContent = '▶ Play';
     }
   });
 
   // Rewind
   rewindBtn.addEventListener('click', () => {
-    if (ws) ws.setTime(0);
+    if (!ws) return;
+    ws.setTime(0);
+    // Restart from the top rather than leaving the synth playing from the
+    // old position with the cursor sitting at zero.
+    if (midiOut.isHardware() && midiOut.isPlaying()) hardwareStart(0);
   });
 
   // Re-render when instrument changes and audio was already rendered;
@@ -1346,6 +1494,10 @@ function buildMidiCard(label, info) {
       renderAndLoad(false);
     }
   });
+
+  // A saved preference may already have restored a hardware port before the
+  // routing callback above was wired, so set the button label once now.
+  updateTransportLabel();
 
   // Auto-render waveform on card creation (no autoplay)
   renderAndLoad(false);
