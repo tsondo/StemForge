@@ -628,6 +628,15 @@ input[type="range"]::-moz-range-track {
   white-space: nowrap;
 }
 
+.midi-out-pc-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 .btn-panic {
   border-color: var(--error);
   color: var(--error);

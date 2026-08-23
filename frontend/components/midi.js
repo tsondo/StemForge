@@ -732,8 +732,12 @@ function buildMidiOutSection() {
  * Build a per-card MIDI Out row: port/channel selects, Send/Stop, status.
  * The hardware scheduler is a separate transport from the FluidSynth
  * preview — Send never touches the waveform and vice versa, by design.
+ *
+ * getProgram: () => GM program 0-127, or null when nothing sendable is
+ * selected (Drum Kit). Omitted for the merged row, which has no
+ * instrument selector — its checkbox is not rendered.
  */
-function buildMidiOutRow(label) {
+function buildMidiOutRow(label, getProgram) {
   const portSelect = el('select', { className: 'midi-out-select midi-out-port' });
   const channelSelect = el('select', { className: 'midi-out-select' });
   for (let c = 1; c <= 16; c++) {
@@ -741,11 +745,19 @@ function buildMidiOutRow(label) {
   }
   const sendBtn = el('button', { className: 'btn btn-sm', disabled: 'true' }, '▶ Send');
   const outStopBtn = el('button', { className: 'btn btn-sm', disabled: 'true' }, '■ Stop');
+  // Off by default: the instrument dropdown selects a FluidSynth patch, and
+  // silently overwriting whatever the user dialled in on their synth would
+  // be hostile. Drum stems never send PC even when checked — GM percussion
+  // is a channel convention, not a program.
+  const progChangeBox = el('input', { type: 'checkbox', className: 'midi-out-pc' });
+  const progChangeLabel = el('label', { className: 'text-dim midi-out-pc-label' },
+    progChangeBox, 'Send Program Change');
   const outStatus = el('span', { className: 'midi-out-status text-dim' });
   const row = el('div', { className: 'midi-out-row' },
     el('label', { className: 'text-dim' }, 'MIDI Out:'),
-    portSelect, channelSelect, sendBtn, outStopBtn, outStatus,
+    portSelect, channelSelect, sendBtn, outStopBtn, progChangeLabel, outStatus,
   );
+  if (!getProgram) progChangeLabel.classList.add('hidden');
 
   // A dead control is worse than no control.
   if (!window.isSecureContext || !webMidiSupported()) {
@@ -831,6 +843,15 @@ function buildMidiOutRow(label) {
     }
     entry.sched = sched;
 
+    // Program Change: only when checked, and suppressed for drum stems —
+    // keyed off the stem label / track flags, never off a dropdown value,
+    // and never forcing channel 10 (the channel is the user's choice).
+    let program = null;
+    if (progChangeBox.checked && getProgram
+        && !isDrumStem(label) && !data.tracks.some((tr) => tr.is_drum)) {
+      program = getProgram();
+    }
+
     const duration = data.duration;
     const truncNote = data.truncated ? ' — truncated, run Clean Up' : '';
     sched.onTick((sec) => {
@@ -847,7 +868,7 @@ function buildMidiOutRow(label) {
       entry.sched = null;
       resetUi('Port disconnected');
     });
-    sched.play(events);
+    sched.play(events, { program });
     outStopBtn.removeAttribute('disabled');
     syncSendState();
   }
@@ -924,7 +945,10 @@ function buildMidiCard(label, info) {
   );
 
   // MIDI Out row — hardware output, independent of the FluidSynth preview
-  const midiOutRow = buildMidiOutRow(label);
+  const midiOutRow = buildMidiOutRow(label, () => {
+    const val = instrumentSelect.value;
+    return val === 'drum' ? null : parseInt(val, 10);
+  });
 
   // Waveform container (initially empty — populated on first render)
   const waveContainer = el('div', { className: 'stem-waveform' });
