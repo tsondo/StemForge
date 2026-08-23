@@ -332,9 +332,12 @@ _Add future feature ideas below this line._
   event types without a breaking change.
 - **Multi-port merged playback** — route each instrument of the merged
   MIDI to a different port/channel from a single card; the `tracks[]`
-  response shape already supports it.
-- **Seek / start-from-playhead** — a `startSec` argument to `play()` plus
-  a rule for notes already sounding at the seek point.
+  response shape already supports it. (The merged MIDI now has a full card
+  of its own, so this is purely about fanning its instruments out to more
+  than one destination.)
+- ~~**Seek / start-from-playhead**~~ — **shipped** in spec rev. 3.
+  `play()` takes `startSec`; a note already sounding at the seek point is
+  skipped rather than re-attacked, and its orphaned note-off is suppressed.
 
 ### Improved audio generation
 - Evaluate newer open-source generation models as they emerge

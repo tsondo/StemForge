@@ -21,6 +21,7 @@ Additional systems:
   - **Clean Up** — UVR denoise, dereverb, debleed via vendored `python-audio-separator` fork (8 curated presets across Roformer/MDXC/VR architectures)
   - **Tune** — auto-tune via CREPE neural pitch detection (`torchcrepe`) + selectable resynthesis method: WORLD vocoder (`pyworld`, best on lossless audio) or STFT phase vocoder with formant preservation (`stftpitchshift`, better on compressed/MP3); scale snapping with correction strength and humanization controls
   - **Effects** — per-stem channel strip with 4 effect types (EQ, Compressor, Noise Gate, Stereo Width), each offering DSP and/or ML methods: 3-band parametric EQ (`scipy.signal`), DSP/LA-2A neural compressor (`vendor/micro_tcn`, Apache 2.0), DSP/Spectral (`torchgating`)/DeepFilterNet(disabled, numpy<2.0 conflict) noise gate, Mid/Side stereo width
+- **MIDI Out** (`frontend/components/webmidi.js`) — Web MIDI hardware output from the MIDI tab. Each card routes to **SoftSynth** (FluidSynth preview) or a hardware port from one transport button, so the two can never sound at once; the waveform tracks and seeks hardware playback. Worker-driven lookahead scheduler, two-phase stop, global Panic. Browser-side only — no Python MIDI dependency
 - **Model registry** (`models/registry.py`) — frozen `ModelSpec` descriptors for all models; single source of truth for device rules, sample rates, capabilities, metadata, and pipeline defaults
 - **Audio profiler** (`utils/audio_profile.py`) — spectral analysis that recommends the best engine/model for a given audio file
 - **Mix engine** — multi-track mixer combining audio stems and MIDI-rendered tracks with per-track instrument, volume, and FLAC render
@@ -49,6 +50,7 @@ All pipelines and the full web UI are implemented:
 - Batch separation — multi-file upload, single-stem extraction across all files, Save All zip download
 - Upload supports audio (WAV, FLAC, MP3, OGG, AIFF) and video (MP4, MKV, WEBM, AVI, MOV) — video audio extracted via FFmpeg
 - Export panel — all pipeline outputs, 6 audio formats (wav/flac/aiff/mp3/ogg/m4a), MIDI export (per-stem + merged multi-track, SMF format 0 or 1 for hardware arrangers), zip download
+- MIDI Out — per-card Web MIDI routing to hardware synths (Chrome/Edge, secure context), simultaneous playback across ports/channels, optional Program Change with drum suppression, localStorage port memory, merged-MIDI card. See `docs/WEB_MIDI_OUT_SPEC.md` (rev. 3)
 - Waveform visualization via wavesurfer.js with global transport bar
 - Deterministic uv environment, Python 3.12, CUDA 13.0 wheels
 - macOS support via MPS acceleration (separate `pyproject.toml.MAC`)
@@ -108,6 +110,7 @@ StemForge/
 │       ├── generate.js             # Synth tab (Stable Audio Open)
 │       ├── compose.js              # Compose tab (AceStep — 3-col layout)
 │       ├── export.js               # Export tab
+│       ├── webmidi.js              # Web MIDI — port discovery, worker clock, scheduler
 │       ├── midi-viz.js             # Canvas piano roll
 │       └── audio-player.js         # Global transport bar
 │
@@ -191,7 +194,8 @@ utils/  →  models/  →  pipelines/  →  backend/services/  →  backend/api/
 | GET | /api/separate/recommend | sync | Quick engine recommendation |
 | GET | /api/jobs/{id} | sync | Poll any job's status |
 | POST | /api/midi/extract | job | Start MIDI extraction |
-| POST | /api/midi/render | sync | FluidSynth render to WAV |
+| POST | /api/midi/render | sync | FluidSynth render to WAV; accepts `merged`. `program`/`is_drum` are optional overrides — omit to preserve each instrument's own voice |
+| POST | /api/midi/events | sync | Flatten session MIDI to a JSON note-event list for Web MIDI (read-only) |
 | POST | /api/midi/save | sync | Save MIDI to disk |
 | GET | /api/midi/stems | sync | Available MIDI stem labels |
 | POST | /api/generate | job | Start audio generation (Synth) |
@@ -308,7 +312,7 @@ call `transportStop()`.
 | `loader.js` | Upload preview | — |
 | `separate.js` | Stem cards, batch cards | Stop btn, finish event |
 | `enhance.js` | Result card play btn + auto-load on job done | Stop btn, finish event |
-| `midi.js` | MIDI render play | Stop btn, finish event |
+| `midi.js` | MIDI render play (SoftSynth routing only — see below) | Stop btn, finish event |
 | `generate.js` | Synth result cards | Stop btn, finish event |
 | `compose.js` | Compose result play, Voice result play | Stop btn, finish event |
 | `mix.js` | Track play, MIDI track play, Play All, Master Mix | Stop btn, finish, stopPreview |
@@ -317,6 +321,16 @@ The `source` parameter (e.g. `'Separate'`, `'Mix'`, `'Enhance › Tune'`) is sho
 as "Now Playing (source): label" so the user always knows which tab produced the
 audio. When adding new playable components, wire them to the transport bar
 following this same pattern.
+
+**The one exception: MIDI Out hardware playback.** When a MIDI card is routed
+to a hardware port rather than SoftSynth, its transport drives an external
+synth and the browser produces no audible audio — the wavesurfer instance runs
+muted purely to move the cursor. `transportLoad()` is therefore *not* called in
+that path, because a transport bar showing "Now Playing" over silence would be
+a lie. `transportStop()` is still called when routing changes, so the bar never
+retains a stale entry. Do not "fix" this by wiring hardware playback into
+`audio-player.js`; it is an audio transport, and this is deliberate
+(`docs/WEB_MIDI_OUT_SPEC.md` rev. 3).
 
 ### Job polling
 
