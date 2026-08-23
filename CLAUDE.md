@@ -179,6 +179,10 @@ utils/  →  models/  →  pipelines/  →  backend/services/  →  backend/api/
 | GET | /api/health | sync | Health check |
 | GET | /api/device | sync | GPU/device info |
 | GET | /api/models | sync | All registered models |
+| GET | /api/capabilities | sync | Optional system capabilities (LilyPond, etc.) |
+| GET | /api/hf-token | sync | Whether a HuggingFace token is configured |
+| POST | /api/hf-token | sync | Save a user-provided HuggingFace token |
+| DELETE | /api/hf-token | sync | Remove the stored HuggingFace token |
 | GET | /api/session | sync | Current session state |
 | DELETE | /api/session | sync | Clear session |
 | POST | /api/upload | sync | Upload audio/video file (video → FFmpeg audio extraction) |
@@ -198,6 +202,16 @@ utils/  →  models/  →  pipelines/  →  backend/services/  →  backend/api/
 | POST | /api/midi/events | sync | Flatten session MIDI to a JSON note-event list for Web MIDI (read-only) |
 | POST | /api/midi/save | sync | Save MIDI to disk |
 | GET | /api/midi/stems | sync | Available MIDI stem labels |
+| GET | /api/midi/gm-programs | sync | 128 GM program names + smart per-stem defaults |
+| POST | /api/midi/import | sync | Import an external .mid/.midi into the session |
+| GET | /api/midi/soundfont | sync | Currently active soundfont path |
+| POST | /api/midi/soundfont | sync | Set active soundfont (empty string = auto-discover) |
+| POST | /api/midi/clean | sync | music21 quantize/clean; **replaces** session MIDI |
+| POST | /api/midi/transpose | sync | Transpose; **replaces** session MIDI |
+| POST | /api/midi/detect-key | sync | Key detection over a stem's MIDI |
+| POST | /api/midi/sheet-music | sync | MusicXML string for in-browser OSMD rendering |
+| POST | /api/midi/sheet-music/musicxml | sync | MusicXML file download |
+| POST | /api/midi/sheet-music/pdf | sync | PDF via LilyPond (requires LilyPond) |
 | POST | /api/generate | job | Start audio generation (Synth) |
 | GET | /api/compose/health | sync | AceStep subprocess status |
 | POST | /api/compose/start | async | Launch AceStep on first use (idempotent) |
@@ -210,6 +224,8 @@ utils/  →  models/  →  pipelines/  →  backend/services/  →  backend/api/
 | POST | /api/compose/estimate-duration | sync | Auto-duration estimation |
 | POST | /api/compose/estimate-sections | sync | Section structure estimation |
 | POST | /api/compose/upload-audio | sync | Upload audio for Rework mode |
+| GET | /api/compose/rework-sources | sync | Audio sources available for Rework |
+| POST | /api/compose/analyze-audio | sync | Extract BPM, key, lyrics, style from audio |
 | POST | /api/compose/send-to-session | sync | Save compose audio to session |
 | POST | /api/compose/lora/load | async | Load LoRA/LoKR adapter |
 | POST | /api/compose/lora/unload | async | Unload adapter, restore base model |
@@ -238,23 +254,41 @@ utils/  →  models/  →  pipelines/  →  backend/services/  →  backend/api/
 | POST | /api/compose/train/snapshots/save | async | Save dataset + tensors snapshot |
 | POST | /api/compose/train/snapshots/load | async | Load snapshot |
 | DELETE | /api/compose/train/snapshots/{name} | async | Delete snapshot |
+| POST | /api/transcribe | job | Start lyrics transcription (MIDI tab → Lyrics) |
+| GET | /api/transcribe/engines | sync | Available transcription engines + capabilities |
+| POST | /api/voice/convert | job | Start RVC voice conversion (Compose → Voice) |
+| POST | /api/voice/upload | sync | Upload audio for voice conversion |
+| GET | /api/voice/models | sync | Downloaded + known-downloadable voice models |
+| GET | /api/voice/models/search | sync | Search HuggingFace for RVC models |
+| POST | /api/voice/models/import | sync | Import an RVC model from a HF repo |
+| POST | /api/voice/models/upload | sync | Upload a local .pth (+ optional .index) |
+| DELETE | /api/voice/models/{name} | sync | Delete a downloaded voice model |
 | GET | /api/mix/tracks | sync | Current track list |
 | POST | /api/mix/tracks | sync | Update track state |
 | POST | /api/mix/render | job | Render mix to FLAC |
 | POST | /api/mix/add-audio | sync | Add manual audio track |
 | POST | /api/mix/add-midi | sync | Add manual MIDI track |
 | DELETE | /api/mix/tracks/{id} | sync | Remove track |
+| POST | /api/mix/add-by-path | sync | Add an existing audio file as a track (no upload) |
+| POST | /api/mix/clear | sync | Remove all tracks (called on page load) |
+| POST | /api/mix/render-track/{id} | sync | Render one MIDI track for inline preview |
 | POST | /api/sfx/create | sync | Create SFX canvas |
 | GET | /api/sfx | sync | List all SFX canvases |
 | GET | /api/sfx/available-clips | sync | Clips grouped by session/saved/imported |
 | POST | /api/sfx/upload-clip | sync | Import external audio clip |
 | POST | /api/sfx/rename-clip | sync | Rename clip file + update manifests |
+| GET | /api/sfx/browse-sounds | sync | Generated + imported sounds for the Add Sound picker |
+| POST | /api/sfx/keep-clip | sync | Mark a generated clip kept/unkept |
+| POST | /api/sfx/delete-sound | sync | Delete a generated or imported sound from disk |
 | GET | /api/sfx/{id} | sync | Get canvas manifest + rendered path |
 | POST | /api/sfx/{id}/placements | sync | Add clip placement |
 | PUT | /api/sfx/{id}/placements/{pid} | sync | Update placement |
 | DELETE | /api/sfx/{id}/placements/{pid} | sync | Remove placement |
 | PATCH | /api/sfx/{id} | sync | Update canvas (duration, limiter, align) |
 | POST | /api/sfx/{id}/send-to-mix | sync | Render canvas + add as Mix track |
+| POST | /api/sfx/{id}/clear-lane | sync | Clear a lane, then compact remaining lanes |
+| POST | /api/sfx/{id}/merge-lanes | sync | Move placements between lanes, then compact |
+| POST | /api/sfx/{id}/merge-canvas | sync | Absorb another canvas's placements into this one |
 | DELETE | /api/sfx/{id} | sync | Delete canvas |
 | GET | /api/sfx/{id}/stream | sync | Stream rendered canvas audio |
 | GET | /api/sfx/{id}/reference-waveform | sync | Downsampled peaks for align ref |
