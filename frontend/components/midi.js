@@ -672,7 +672,12 @@ function buildMidiOutSection() {
   }
 
   if (!window.isSecureContext) {
-    setBanner('banner-error', 'Web MIDI requires HTTPS or localhost. Open StemForge at http://localhost:8765.');
+    setBanner(
+      'banner-error',
+      'Web MIDI requires a secure context. Browse to this server at '
+      + `http://localhost:${window.location.port || 80} on the machine running `
+      + 'StemForge, or serve it over HTTPS — see the MIDI Out section of README.md.',
+    );
     actions.classList.add('hidden');
   } else if (!webMidiSupported()) {
     setBanner('banner-error', 'Web MIDI is not available in this browser. Chrome or Edge is required.');

@@ -52,6 +52,7 @@ jobs:
         run: >
           uv run pytest -q
           tests/test_endpoint_docs.py
+          tests/test_cli_args.py
           tests/test_midi_events.py
           tests/test_midi_render.py
           tests/test_midi_io_drum.py
