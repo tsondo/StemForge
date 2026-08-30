@@ -2,13 +2,17 @@
 
 Downloads the ``.ckpt`` weight file and ``.yaml`` config file on first use,
 then instantiates the appropriate model class from the ``bs-roformer`` package.
+
+Downloads go through :func:`utils.hf_hub.download_file`, which routes
+huggingface.co URLs via ``hf_hub_download`` with StemForge's token. An
+anonymous fetch of a Hub-hosted checkpoint gets HTTP 401 the moment the repo
+is gated. Checkpoints served from GitHub releases still download directly.
 """
 
 from __future__ import annotations
 
 import logging
 import pathlib
-import urllib.request
 from typing import Any
 
 import torch
@@ -18,6 +22,7 @@ import yaml
 from models.registry import get_spec, RoformerSpec
 from utils.cache import get_model_cache_dir
 from utils.errors import ModelLoadError
+from utils.hf_hub import download_file
 
 
 log = logging.getLogger("stemforge.models.roformer_loader")
@@ -145,16 +150,8 @@ class RoformerModelLoader:
     # ------------------------------------------------------------------
 
     def _download(self, url: str, dest: pathlib.Path) -> None:
-        """Atomically download *url* to *dest* via a temporary file."""
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        tmp = dest.with_suffix(dest.suffix + ".tmp")
-        try:
-            urllib.request.urlretrieve(url, str(tmp))
-            tmp.rename(dest)
-        except Exception:
-            if tmp.exists():
-                tmp.unlink(missing_ok=True)
-            raise
+        """Atomically download *url* to *dest*, authenticating Hub URLs."""
+        download_file(url, dest)
 
     def _instantiate(self, spec: RoformerSpec, yaml_config: dict[str, Any]) -> nn.Module:
         """Instantiate the correct model class from *yaml_config* without weights."""

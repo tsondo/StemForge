@@ -138,6 +138,7 @@ StemForge/
 │
 ├── utils/
 │   ├── cache.py                    # Model cache dir resolution (MODEL_LOCATION)
+│   ├── hf_hub.py                   # HuggingFace token resolution + authenticated download
 │   ├── paths.py                    # Output directory constants (shared across layers)
 │   ├── audio_io.py                 # read_audio / write_audio
 │   ├── audio_profile.py            # Spectral analysis + engine recommendation
@@ -468,6 +469,7 @@ AceStep runs as a separate process, spawned lazily on first use (`POST
 
 ## Caches and logs
 
+- HuggingFace auth: `utils/hf_hub.py` → `get_hf_token()` (UI-saved token, then `HF_TOKEN` / `huggingface-cli login`) and `download_file()`, which routes huggingface.co URLs through `hf_hub_download` so gated repos don't 401
 - Model weights: `~/.cache/stemforge/` (subdirs per model type) — override with `MODEL_LOCATION` env var or `--model-dir` flag
 - Cache resolution: `utils/cache.py` → `get_model_cache_base()` / `get_model_cache_dir(subdir)`
 - AceStep checkpoints: also reads `MODEL_LOCATION` (forwarded via `_PASSTHROUGH_VARS` in `acestep_state.py`)
