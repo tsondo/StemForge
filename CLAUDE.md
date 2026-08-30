@@ -462,7 +462,7 @@ AceStep runs as a separate process, spawned lazily on first use (`POST
   - CPU-bound in this variant: UVR enhance (onnxruntime) and faster-whisper (ctranslate2). AceStep's LM is *not* an AMD regression — the prebuilt flash-attn wheels are marker-pinned to Python 3.11 and the project requires 3.12, so every platform (CUDA included) already runs the SDPA path
   - `Ace-Step-Wrangler` **standalone** is CUDA-only (its own pyproject pins cu128 indexes + a prebuilt CUDA flash-attn wheel); ROCm users must run AceStep through StemForge
 - **FluidSynth**: Required for MIDI preview and Mix tab; GM soundfont auto-discovered
-- **CI**: GitHub Actions (`.github/workflows/ci.yml`) — lock drift check, ROCm resolve-only check, and a CPU test job on every PR/push; Dependabot updates action versions and submodule pointers weekly
+- **CI**: GitHub Actions (`.github/workflows/ci.yml`) — lock drift check, pyproject variant parity check (`tests/test_pyproject_variants.py` — CUDA vs ROCm dependency lists), ROCm resolve-only check, and a CPU test job on every PR/push; Dependabot updates action versions and submodule pointers weekly
 
 ---
 

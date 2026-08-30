@@ -26,6 +26,8 @@ jobs:
         with:
           submodules: recursive
       - uses: astral-sh/setup-uv@v10.0.0
+      - name: Check variant dependency parity
+        run: uv run --no-project --with pytest pytest -q tests/test_pyproject_variants.py
       - name: Resolve ROCm variant
         run: |
           cp pyproject.toml.ROCM pyproject.toml
@@ -52,6 +54,7 @@ jobs:
         run: >
           uv run pytest -q
           tests/test_endpoint_docs.py
+          tests/test_pyproject_variants.py
           tests/test_midi_events.py
           tests/test_midi_render.py
           tests/test_midi_io_drum.py
