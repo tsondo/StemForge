@@ -198,11 +198,12 @@ Add the `export` line to your `~/.zshrc` so it persists across sessions.
 
 ### macOS limitations
 
-- **`mdx_extra_q` Demucs model** is not available on macOS (requires `diffq`, which does not build on macOS). The model is automatically hidden from the UI.
-- **BasicPitch MIDI extraction** may have limited functionality on macOS — `ai-edge-litert` (the TFLite runtime) is a Linux-only package. The MIDI tab will surface a clear error if this is attempted.
+- **Build tools**: `pyworld` (Enhance › Tune WORLD resynthesis) and `diffq` (the `mdx_extra_q` quantized Demucs model) publish no cp312 macOS wheels, so `uv sync` builds them from source — install the Xcode command line tools first (`xcode-select --install`).
+- **BasicPitch MIDI extraction** works — `ai-edge-litert` (the TFLite runtime) now ships macOS arm64 wheels.
 - **Vocal MIDI** (faster-whisper) works on macOS.
 - **Stable Audio Open** generation works on macOS via MPS.
-- **AceStep** (Compose tab) works on macOS — the subprocess handles MPS detection independently.
+- **AceStep** (Compose tab) works on macOS — upstream ACE-Step 1.5 supports Apple Silicon natively, running its language model through MLX.
+- The dependency set is resolution-verified for darwin/arm64 in CI but untested on real hardware — reports welcome.
 
 ### Performance
 

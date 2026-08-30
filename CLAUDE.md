@@ -38,7 +38,7 @@ AceStep runs on port 8001 by default. Disable with `--no-acestep`.
 All pipelines and the full web UI are implemented:
 
 - Demucs separation — 4 models (htdemucs, htdemucs_ft, mdx_extra, mdx_extra_q), CUDA fallback for MDX-Net
-- BS-Roformer separation — 6 models including ViperX vocals (SDR 12.97), KJ vocals, ZFTurbo 4-stem, jarredou 6-stem
+- BS-Roformer separation — 3 models: ViperX vocals (SDR 12.97), ZFTurbo 4-stem, jarredou 6-stem (adds guitar + piano)
 - Automatic engine/model recommendation from spectral audio analysis
 - MIDI extraction — BasicPitch for instruments, faster-whisper + PYIN pitch for vocals, ADTOF for drums (channel 10, license-gated)
 - MIDI preview — server-side FluidSynth render, streamed to browser via wavesurfer.js
@@ -53,7 +53,7 @@ All pipelines and the full web UI are implemented:
 - MIDI Out — per-card Web MIDI routing to hardware synths (Chrome/Edge, secure context), simultaneous playback across ports/channels, optional Program Change with drum suppression, localStorage port memory, merged-MIDI card. See `docs/WEB_MIDI_OUT_SPEC.md` (rev. 3); for non-localhost access, `run.py` takes `--ssl-certfile`/`--ssl-keyfile` (must be given together) — see `docs/MIDI_OUT_SECURE_CONTEXT_SPEC.md`
 - Waveform visualization via wavesurfer.js with global transport bar
 - Deterministic uv environment, Python 3.12, CUDA 13.0 wheels
-- macOS support via MPS acceleration (separate `pyproject.toml.MAC`)
+- macOS support via MPS acceleration (separate `pyproject.toml.MAC`, dependency-matched to the CUDA variant and resolve-checked in CI)
 
 ---
 
@@ -63,7 +63,7 @@ All pipelines and the full web UI are implemented:
 StemForge/
 ├── run.py                          # Launcher: uvicorn + AceStep subprocess management
 ├── pyproject.toml
-├── pyproject.toml.MAC              # macOS variant (MPS, no CUDA index)
+├── pyproject.toml.MAC              # macOS variant (MPS via PyPI torch wheels, no CUDA index)
 ├── pyproject.toml.ROCM             # AMD variant (ROCm 7.1 torch index)
 │
 ├── Ace-Step-Wrangler/              # Git submodule (independently runnable)
@@ -87,12 +87,15 @@ StemForge/
 │   │   ├── enhance.py              # /api/enhance, /api/enhance/presets|stems|autotune (Enhance tab)
 │   │   ├── mix.py                  # /api/mix/tracks|render|add-audio|add-midi
 │   │   ├── sfx.py                  # /api/sfx/* (SFX Stem Builder — canvas, placements, render)
+│   │   ├── transcribe.py           # /api/transcribe, /api/transcribe/engines (Lyrics)
+│   │   ├── voice.py                # /api/voice/* (RVC voice conversion + model management)
 │   │   └── export.py               # /api/export, /api/export/download-zip
 │   └── services/
 │       ├── __init__.py
 │       ├── job_manager.py          # Background thread runner + in-memory job store
 │       ├── session_store.py        # Thread-safe session state (replaces old AppState)
 │       ├── pipeline_manager.py     # Lazy-loaded pipeline singletons
+│       ├── sfx_renderer.py         # Renders an SFX manifest (canvas + placements) to a WAV
 │       └── acestep_state.py        # AceStep subprocess status (disabled/starting/running/crashed)
 │
 ├── frontend/
@@ -123,6 +126,8 @@ StemForge/
 │   ├── midi_pipeline.py
 │   ├── basicpitch_pipeline.py
 │   ├── vocal_midi_pipeline.py
+│   ├── transcribe_pipeline.py      # Lyrics — Whisper / Qwen engines, txt + LRC + SRT
+│   ├── rvc_pipeline.py             # RVC voice conversion (wraps vendor/rvc)
 │   ├── musicgen_pipeline.py
 │   └── resample.py
 │
@@ -138,10 +143,16 @@ StemForge/
 │
 ├── utils/
 │   ├── cache.py                    # Model cache dir resolution (MODEL_LOCATION)
+│   ├── hf_hub.py                   # HuggingFace token resolution + authenticated download
 │   ├── paths.py                    # Output directory constants (shared across layers)
 │   ├── audio_io.py                 # read_audio / write_audio
 │   ├── audio_profile.py            # Spectral analysis + engine recommendation
 │   ├── midi_io.py                  # MIDI read / write / helpers
+│   ├── music21_bridge.py           # music21 round-trip — quantize, transpose, key, MusicXML
+│   ├── world_shift.py              # WORLD vocoder pitch shift (Harvest F0)
+│   ├── world_shift_fast.py         # WORLD pitch shift driven by CREPE F0 (skips Harvest)
+│   ├── stft_shift.py               # STFT phase-vocoder pitch shift w/ formant preservation
+│   ├── nsf_shift.py                # NSF-HiFiGAN neural vocoder pitch shift (GPU)
 │   ├── device.py                   # get_device / is_mps — platform-aware torch device
 │   ├── platform.py                 # get_data_dir — OS-idiomatic data paths
 │   ├── logging_utils.py            # configure_logging
@@ -379,7 +390,7 @@ Frozen `ModelSpec` subclasses describe every model variant. Spec types:
 | Spec class | Models | Pipeline |
 |---|---|---|
 | `DemucsSpec` | htdemucs, htdemucs_ft, mdx_extra, mdx_extra_q | `DemucsPipeline` |
-| `RoformerSpec` | roformer-viperx-vocals, roformer-kj-vocals, roformer-zfturbo-4stem, roformer-jarredou-6stem, + 2 more | `RoformerPipeline` |
+| `RoformerSpec` | roformer-viperx-vocals, roformer-zfturbo-4stem, roformer-jarredou-6stem | `RoformerPipeline` |
 | `BasicPitchSpec` | basicpitch | `BasicPitchPipeline` |
 | `DrumMidiSpec` | adtof-drums | `MidiPipeline` (drum routing branch) |
 | `WhisperSpec` | whisper-tiny, whisper-small, whisper-large-v3 | `VocalMidiPipeline`, `TranscribePipeline` |
@@ -455,19 +466,26 @@ AceStep runs as a separate process, spawned lazily on first use (`POST
 
 - **Linux (primary)**: CUDA 13.0 wheels, uv sync, Python 3.12
 - **macOS (Apple Silicon)**: MPS acceleration via `pyproject.toml.MAC`; use `from utils.device import get_device`, never hardcode `"cuda"`
+  - Declares the same dependency list as the CUDA variant, at the same pins — torch/torchaudio/torchvision 2.10.0 come from PyPI (the macOS arm64 wheels carry MPS), so there is no wheel index
+  - Two CUDA-only entries are dropped: `nano-vllm` (ACE-Step's own marker already excludes it on darwin/arm64, where its LM runs through MLX; its flash-attn requirements are CUDA wheel URLs) and `nvidia-cuda-runtime-cu12`, which existed only to shim that
+  - AceStep runs here: upstream ACE-Step-1.5 declares macOS arm64 support and pulls `mlx`/`mlx-lm` for it
+  - `pyworld` publishes no macOS wheel, so it builds from its sdist — the Enhance › Tune WORLD method needs the Xcode command line tools (`xcode-select --install`). The STFT method is pure Python and needs nothing
+  - Resolution-verified for darwin/arm64, but untested on real hardware
 - **AMD (ROCm)**: `pyproject.toml.ROCM` — rocm7.1 torch index, same pins; resolution-verified but untested on hardware (issue #11)
   - ROCm's torch presents as CUDA (`torch.cuda.is_available()` is true, HIP translates), so hardcoded `"cuda"` is *not* a ROCm bug — the `get_device` rule exists for MPS
   - Installing overwrites `pyproject.toml` and re-resolves `uv.lock` (the committed lock is cu130); both show dirty afterwards and must not be committed
   - AceStep needs no separate ROCm setup: `acestep_state.launch()` spawns it with `sys.executable`, so it inherits this venv's torch. Its cu128 pins are neutralized by `override-dependencies` + `[tool.uv.sources]` in the ROCM pyproject
   - CPU-bound in this variant: UVR enhance (onnxruntime) and faster-whisper (ctranslate2). AceStep's LM is *not* an AMD regression — the prebuilt flash-attn wheels are marker-pinned to Python 3.11 and the project requires 3.12, so every platform (CUDA included) already runs the SDPA path
+  - The `adtof-pytorch` omission that broke ADTOF drum transcription here is fixed, and `tests/test_pyproject_variants.py` now fails CI if the variants drift again
   - `Ace-Step-Wrangler` **standalone** is CUDA-only (its own pyproject pins cu128 indexes + a prebuilt CUDA flash-attn wheel); ROCm users must run AceStep through StemForge
 - **FluidSynth**: Required for MIDI preview and Mix tab; GM soundfont auto-discovered
-- **CI**: GitHub Actions (`.github/workflows/ci.yml`) — lock drift check, ROCm resolve-only check, and a CPU test job on every PR/push; Dependabot updates action versions and submodule pointers weekly
+- **CI**: GitHub Actions (`.github/workflows/ci.yml`) — lock drift check, pyproject variant parity check (`tests/test_pyproject_variants.py` — CUDA vs ROCm vs macOS dependency lists), ROCm and macOS resolve-only checks, and a CPU test job on every PR/push; Dependabot updates action versions and submodule pointers weekly
 
 ---
 
 ## Caches and logs
 
+- HuggingFace auth: `utils/hf_hub.py` → `get_hf_token()` (UI-saved token, then `HF_TOKEN` / `huggingface-cli login`) and `download_file()`, which routes huggingface.co URLs through `hf_hub_download` so gated repos don't 401
 - Model weights: `~/.cache/stemforge/` (subdirs per model type) — override with `MODEL_LOCATION` env var or `--model-dir` flag
 - Cache resolution: `utils/cache.py` → `get_model_cache_base()` / `get_model_cache_dir(subdir)`
 - AceStep checkpoints: also reads `MODEL_LOCATION` (forwarded via `_PASSTHROUGH_VARS` in `acestep_state.py`)
