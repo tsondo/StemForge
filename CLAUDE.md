@@ -28,7 +28,7 @@ Additional systems:
 - **SFX Stem Builder** (`backend/api/sfx.py`) — DAW-style canvas for placing audio clips on a timeline, aligned to a reference stem, with per-clip fades and volume; renders to a single stem for the Mix engine
 
 **Architecture**: FastAPI backend (`backend/`) + vanilla HTML/CSS/JS frontend (`frontend/`) + AceStep subprocess.
-Run with `python run.py` → open `http://localhost:8765` in browser.
+Run with `python run.py` → open `http://localhost:8765` in browser. Optional TLS via `--ssl-certfile`/`--ssl-keyfile` (needed for Web MIDI Out from a non-localhost origin — `docs/MIDI_OUT_SECURE_CONTEXT_SPEC.md`).
 AceStep runs on port 8001 by default. Disable with `--no-acestep`.
 
 ---
@@ -50,7 +50,7 @@ All pipelines and the full web UI are implemented:
 - Batch separation — multi-file upload, single-stem extraction across all files, Save All zip download
 - Upload supports audio (WAV, FLAC, MP3, OGG, AIFF) and video (MP4, MKV, WEBM, AVI, MOV) — video audio extracted via FFmpeg
 - Export panel — all pipeline outputs, 6 audio formats (wav/flac/aiff/mp3/ogg/m4a), MIDI export (per-stem + merged multi-track, SMF format 0 or 1 for hardware arrangers), zip download
-- MIDI Out — per-card Web MIDI routing to hardware synths (Chrome/Edge, secure context), simultaneous playback across ports/channels, optional Program Change with drum suppression, localStorage port memory, merged-MIDI card. See `docs/WEB_MIDI_OUT_SPEC.md` (rev. 3)
+- MIDI Out — per-card Web MIDI routing to hardware synths (Chrome/Edge, secure context), simultaneous playback across ports/channels, optional Program Change with drum suppression, localStorage port memory, merged-MIDI card. See `docs/WEB_MIDI_OUT_SPEC.md` (rev. 3); for non-localhost access, `run.py` takes `--ssl-certfile`/`--ssl-keyfile` (must be given together) — see `docs/MIDI_OUT_SECURE_CONTEXT_SPEC.md`
 - Waveform visualization via wavesurfer.js with global transport bar
 - Deterministic uv environment, Python 3.12, CUDA 13.0 wheels
 - macOS support via MPS acceleration (separate `pyproject.toml.MAC`, dependency-matched to the CUDA variant and resolve-checked in CI)

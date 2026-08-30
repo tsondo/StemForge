@@ -62,6 +62,7 @@ jobs:
           tests/test_endpoint_docs.py
           tests/test_pyproject_variants.py
           tests/test_hf_hub.py
+          tests/test_cli_args.py
           tests/test_midi_events.py
           tests/test_midi_render.py
           tests/test_midi_io_drum.py
