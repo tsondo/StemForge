@@ -122,6 +122,19 @@ def _parse_args() -> argparse.Namespace:
              "Default: ~/.cache/stemforge/",
     )
     parser.add_argument(
+        "--ssl-certfile",
+        type=str,
+        default=None,
+        help="Path to a TLS certificate file. Serves over HTTPS. "
+             "Required for Web MIDI Out when browsing from another machine.",
+    )
+    parser.add_argument(
+        "--ssl-keyfile",
+        type=str,
+        default=None,
+        help="Path to the TLS private key file. Must accompany --ssl-certfile.",
+    )
+    parser.add_argument(
         "--deterministic",
         action="store_true",
         default=False,
@@ -163,6 +176,7 @@ def _print_banner(
     gpu: str | None,
     model_dir: str,
     compose_url: str | None = None,
+    scheme: str = "http",
 ) -> None:
     gpu_display = gpu if gpu else "auto"
     if compose_mode == "embedded":
@@ -179,7 +193,7 @@ def _print_banner(
     print("=" * 60)
     print("  StemForge")
     print("=" * 60)
-    print(f"  Server:     http://localhost:{port}")
+    print(f"  Server:     {scheme}://localhost:{port}")
     print(f"  Models:     {model_dir}")
     print(f"  Compose:    {compose_display}")
     print(f"  GPU:        {gpu_display}")
@@ -198,6 +212,17 @@ def _print_banner(
 
 def main() -> None:
     args = _parse_args()
+
+    # TLS flags travel in pairs — a lone flag means the user wants TLS, so
+    # refuse rather than silently start over HTTP. Checked before the GPU
+    # lock so a config error can't leave a lock file behind.
+    if bool(args.ssl_certfile) != bool(args.ssl_keyfile):
+        print(
+            "\n  ERROR: --ssl-certfile and --ssl-keyfile must be given together.\n"
+            "  TLS is required for Web MIDI Out from a non-localhost browser.\n"
+            "  See the MIDI Out section of README.md for certificate options.\n"
+        )
+        sys.exit(1)
 
     # --- GPU exclusion lock (must be first — before any heavy imports) ---
     _gpu_lock_fh = _acquire_gpu_lock()  # noqa: F841  (must stay open)
@@ -245,6 +270,7 @@ def main() -> None:
     _print_banner(
         args.port, args.acestep_port, compose_mode_str,
         args.gpu, str(model_base), args.compose_url,
+        scheme="https" if args.ssl_certfile else "http",
     )
 
     # Graceful shutdown: terminate AceStep subprocess (embedded mode only).
@@ -283,6 +309,8 @@ def main() -> None:
         host="0.0.0.0",
         port=args.port,
         log_level="info",
+        ssl_certfile=args.ssl_certfile,
+        ssl_keyfile=args.ssl_keyfile,
     )
 
 
