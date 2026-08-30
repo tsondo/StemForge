@@ -16,11 +16,17 @@ jobs:
       - uses: astral-sh/setup-uv@v10.0.0
       - run: uv lock --check
 
-  # Resolve-only check of the ROCm variant — keeps pyproject.toml.ROCM from
-  # silently desynchronizing when the main pyproject changes.  No install;
-  # just proves the dependency graph still resolves against the rocm index.
-  rocm-resolve:
+  # Resolve-only checks of the non-CUDA variants — they keep pyproject.toml.ROCM
+  # and pyproject.toml.MAC from silently desynchronizing when the main pyproject
+  # changes.  No install; just proves each dependency graph still resolves.
+  # The macOS graph resolves from Linux because the variant pins its target
+  # environment to darwin/arm64, so uv never consults the host platform.
+  variant-resolve:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [pyproject.toml.ROCM, pyproject.toml.MAC]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -28,9 +34,9 @@ jobs:
       - uses: astral-sh/setup-uv@v10.0.0
       - name: Check variant dependency parity
         run: uv run --no-project --with pytest pytest -q tests/test_pyproject_variants.py
-      - name: Resolve ROCm variant
+      - name: Resolve ${{ matrix.variant }}
         run: |
-          cp pyproject.toml.ROCM pyproject.toml
+          cp ${{ matrix.variant }} pyproject.toml
           uv lock
 
   # Full install + the pytest-style test files.  Runners are CPU-only, so

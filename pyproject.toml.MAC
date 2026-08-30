@@ -1,6 +1,24 @@
-# macOS version — see INSTALL_MAC.md
-# Copy this file to pyproject.toml before installing on macOS.
-# Do NOT commit this file as pyproject.toml; the main pyproject.toml is the Linux/CUDA version.
+# =============================================================================
+# pyproject.toml.MAC — macOS (Apple Silicon) variant.
+#
+# Usage: cp pyproject.toml.MAC pyproject.toml && uv sync
+# Requires macOS 11+ on arm64 with Python 3.12.
+#
+# Differences from the CUDA pyproject:
+#   - torch/torchaudio/torchvision come from PyPI (same 2.10.0 pins; the macOS
+#     arm64 wheels carry MPS), so there is no explicit wheel index
+#   - nano-vllm and nvidia-cuda-runtime-cu12 are dropped — see the note beside
+#     the ACE-Step block below
+#   - pyworld and diffq publish no cp312 macOS wheels and build from sdist,
+#     which needs the Xcode command line tools (xcode-select --install).
+#     pyworld backs the Enhance tab's WORLD resynthesis (the STFT method is
+#     pure Python); diffq backs the mdx_extra_q quantized Demucs model
+#   - Everything else matches the CUDA list exactly, and
+#     tests/test_pyproject_variants.py fails the build if that stops being true
+#
+# Do NOT commit this file as pyproject.toml; the checked-in pyproject.toml is
+# the Linux/CUDA version and uv.lock is resolved against it.
+# =============================================================================
 
 [build-system]
 requires = ["hatchling"]
@@ -9,12 +27,12 @@ build-backend = "hatchling.build"
 [project]
 name = "stemforge"
 version = "0.1.0"
-description = "AI-powered stem separation, MIDI extraction, and music generation desktop application"
+description = "AI-powered stem separation, MIDI extraction, and music generation — web UI"
 readme = "README.md"
 license = { text = "Apache-2.0" }
 requires-python = "==3.12.*"
 authors = [
-    { name = "StemForge Contributors" },
+    { name = "Todd Green", email = "info@tsondo.com" },
 ]
 keywords = [
     "audio",
@@ -40,25 +58,30 @@ classifiers = [
 # Runtime dependencies — macOS / Apple Silicon
 # ---------------------------------------------------------------------------
 dependencies = [
-    # Core PyTorch stack — standard PyPI wheels (no CUDA index needed on macOS)
-    "torch>=2.1.0",
-    "torchaudio>=2.1.0",
+    # Core PyTorch stack — PyPI macOS arm64 wheels (MPS); no wheel index needed.
+    "torch==2.10.0",
+    "torchaudio==2.10.0",
 
-    # GitHub-pinned ML components
+    # GitHub-pinned ML components (renamed distributions)
     "demucs @ git+https://github.com/facebookresearch/demucs.git@v4.0.1",
+    "adtof-pytorch @ git+https://github.com/xavriley/ADTOF-pytorch@85c192e",
+    #"basic-pitch @ git+https://github.com/spotify/basic-pitch.git",    
 
-    # Demucs deps (mdx_extra_q / diffq excluded — diffq not available on macOS)
+    # Demucs deps
     "dora-search==0.1.12",
     "submitit==1.5.4",
     "openunmix==1.3.0",
     "julius==0.2.7",
     "lameenc==1.8.1",
+    "diffq==0.2.4",    # required by mdx_extra_q (quantized MDX model)
 
-    # BasicPitch deps (ai-edge-litert excluded — not available on macOS)
+    # BasicPitch deps
     "pretty_midi==0.2.11",
     "mir_eval==0.8.2",
     "resampy>=0.4.0",
     "setuptools>=78.1.1,<82",
+    "ai-edge-litert>=1.1.0",
+
 
     # Audio I/O + DSP
     "soundfile==0.13.1",
@@ -78,21 +101,54 @@ dependencies = [
     "bs-roformer>=0.3.2",
     "pyyaml>=6.0.0",
 
-    # Stable Audio Open (via diffusers)
+    # Stable Audio Open (via diffusers — avoids laion-clap / numpy conflict)
     "diffusers>=0.30.0",
     "torchsde>=0.2.6",
     "transformers>=4.40.0",
     "accelerate>=0.30.0",
+    # Qwen3-ASR — purpose-built ASR for the Lyrics tab (Addendum 8)
+    "qwen-asr>=0.0.6",
     "safetensors>=0.4.2",
     "einops>=0.7.0",
     "huggingface_hub>=0.23.0",
+    "hf-xet>=1.0.0",
+
+    # Web backend
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "python-multipart>=0.0.31",
+    "httpx>=0.28.1",
+
+    # ACE-Step music generation (resolved via [tool.uv.sources])
+    # nano-vllm is omitted: ACE-Step's own marker excludes it on darwin/arm64
+    # (its LM runs through MLX there), and its flash-attn URLs are CUDA wheels.
+    # nvidia-cuda-runtime-cu12 goes with it — there is no CUDA runtime to shim.
+    "ace-step",
+    "torchvision",
+
+    # RVC voice conversion (vendor/rvc)
+    "faiss-cpu>=1.9.0",
+    "torchcrepe>=0.0.22",
+    "torchfcpe>=0.0.4",
+    "noisereduce>=3.0.0",
+    "stftpitchshift>=1.5.0",
+
+    # Audio enhancement — UVR denoise/dereverb (vendored fork)
+    "audio-separator",
+
+    # Auto-tune — WORLD vocoder for pitch-corrected resynthesis
+    "pyworld>=0.3.0",
+
+    # Effects chain — spectral noise gate
+    "torchgating>=0.1.3b0",
+    # NOTE: deepfilternet requires numpy<2.0 — incompatible with our numpy>=2.0.
+    # DeepFilterNet gate method is disabled at runtime; imported lazily with a
+    # clear error if the user tries to select it.
 
     # MIDI cleanup, analysis, and sheet music (music21)
     "music21>=9.1,<10",
 
-    # GUI
-    "dearpygui>=1.11.0",
-    "sounddevice>=0.5.0",
+    # Audio playback / MIDI render
     "pyfluidsynth>=1.3.4",
 
     # .env loading
@@ -103,7 +159,10 @@ dependencies = [
 # Dependency groups (PEP 735) — uv dev tooling
 # ---------------------------------------------------------------------------
 [dependency-groups]
-dev = ["pip"]
+dev = [
+    "pip",
+    "pytest>=9.0.2",
+]
 
 # ---------------------------------------------------------------------------
 # Optional dependency groups (PEP 508 extras)
@@ -121,14 +180,35 @@ dev = [
 # Console scripts
 # ---------------------------------------------------------------------------
 [project.scripts]
-stemforge = "gui.app:main"
+stemforge = "run:main"
 
-# ---------------------------------------------------------------------------
+#----------------------------------------------------------------------------
+# Tool hints ----------------------------------------------------------------
+[tool.uv]
+environments = ["python_version == '3.12' and sys_platform == 'darwin' and platform_machine == 'arm64'"]
+# ACE-Step pins +cu128 torch builds for Linux/Windows; on darwin/arm64 it asks
+# for plain PyPI wheels, so these overrides only hold the version steady.
+override-dependencies = [
+    "torch==2.10.0",
+    "torchaudio==2.10.0",
+    "torchvision==0.25.0",
+    # Exclude gradio entirely: only AceStep's standalone web UI (acestep/ui/,
+    # never launched — we run acestep.api_server, patched headless in our
+    # ACE-Step-1.5 fork) and qwen-asr's demo CLI use it. Its ==6.2.0 pin
+    # capped starlette <1.0 and carried 6 open security advisories.
+    "gradio; sys_platform == 'never'",
+]
+[tool.uv.sources]
+ace-step = { path = "Ace-Step-Wrangler/vendor/ACE-Step-1.5", editable = true }
+audio-separator = { path = "vendor/python-audio-separator" }
+
+#---------------------------------------------------------------------------
 # Hatchling build configuration
 # ---------------------------------------------------------------------------
 [tool.hatch.build.targets.wheel]
-packages = ["gui", "pipelines", "models", "utils"]
-include = ["config.py"]
+packages = ["backend", "pipelines", "models", "utils"]
+include = ["config.py", "run.py"]
+artifacts = ["frontend/**"]
 [tool.hatch.metadata]
 allow-direct-references = true
 
@@ -144,7 +224,7 @@ select = ["E", "W", "F", "I", "UP", "B", "C4", "SIM"]
 ignore = ["E501"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["config", "gui", "pipelines", "models", "utils"]
+known-first-party = ["config", "backend", "pipelines", "models", "utils"]
 
 # ---------------------------------------------------------------------------
 # Mypy – static type checking
