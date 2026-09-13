@@ -37,7 +37,7 @@ classifiers = [
 # ---------------------------------------------------------------------------
 dependencies = [
     # Core PyTorch stack — CUDA 13.0 wheels via pytorch-cu130 index below.
-    "torch==2.10.0",
+    "torch==2.13.0",
     "torchaudio==2.10.0",
 
     # GitHub-pinned ML components (renamed distributions)
@@ -167,7 +167,7 @@ stemforge = "run:main"
 environments = ["python_version == '3.12' and sys_platform == 'linux'"]
 # Override ace-step's cu128-pinned torch packages to use our cu130 index
 override-dependencies = [
-    "torch==2.10.0",
+    "torch==2.13.0",
     "torchaudio==2.10.0",
     "torchvision==0.25.0",
     # Exclude gradio entirely: only AceStep's standalone web UI (acestep/ui/,
