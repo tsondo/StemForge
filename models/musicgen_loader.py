@@ -88,23 +88,9 @@ class MusicGenModelLoader:
         dtype  = torch.float16 if device.type == "cuda" else torch.float32
 
         # Resolve HuggingFace auth token (needed for gated models).
-        # Priority: 1) StemForge-stored token  2) HF_TOKEN env / huggingface-cli
-        hf_token: str | None = None
-        try:
-            from utils.platform import get_data_dir
-            sf_token_path = get_data_dir() / "hf_token"
-            if sf_token_path.is_file():
-                t = sf_token_path.read_text().strip()
-                if t:
-                    hf_token = t
-        except Exception:
-            pass
-        if hf_token is None:
-            try:
-                from huggingface_hub import get_token  # type: ignore[import]
-                hf_token = get_token()
-            except Exception:
-                pass
+        from utils.hf_hub import get_hf_token
+
+        hf_token: str | None = get_hf_token()
 
         try:
             log.info("Loading %s (dtype=%s) …", model_name, dtype)
